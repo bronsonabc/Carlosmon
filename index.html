@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Carlos Version</title>
+<style>
+  html,body{margin:0;height:100%;background:#17171d;color:#cfcfd8;font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none;user-select:none;touch-action:manipulation;overscroll-behavior:none}
+  #wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0}
+  canvas{width:min(96vw,720px,calc(78vh*1.3636));height:auto;image-rendering:pixelated;image-rendering:crisp-edges;
+    border:4px solid #33333f;border-radius:8px;background:#000}
+  .help{font-size:12px;opacity:.7;margin:0;text-align:center;padding:0 8px}
+  #pad{display:none;width:min(96vw,520px);justify-content:space-between;align-items:center}
+  @media (pointer:coarse){#pad{display:flex}.help{display:none}}
+  .dpad{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px)}
+  .btn{background:#2c2c38;border:2px solid #4a4a5c;border-radius:10px;color:#e8e8f0;font:bold 16px ui-monospace,monospace;
+    display:flex;align-items:center;justify-content:center}
+  .btn.on{background:#5a5a78}
+  .ab{display:flex;gap:12px;align-items:center}
+  .round{width:64px;height:64px;border-radius:50%}
+  .small{width:64px;height:34px;font-size:11px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="screen" width="720" height="528"></canvas>
+  <div id="pad">
+    <div class="dpad">
+      <span></span><div class="btn" data-btn="up">&#9650;</div><span></span>
+      <div class="btn" data-btn="left">&#9664;</div><span></span><div class="btn" data-btn="right">&#9654;</div>
+      <span></span><div class="btn" data-btn="down">&#9660;</div><span></span>
+    </div>
+    <div class="btn small" data-btn="START">MENU</div>
+    <div class="ab">
+      <div class="btn round" data-btn="B">B</div>
+      <div class="btn round" data-btn="A">A</div>
+    </div>
+  </div>
+  <p class="help">Move: Arrow keys / WASD &nbsp;|&nbsp; A (talk / confirm): Z, Space or Enter &nbsp;|&nbsp; B (back, hold to run): X or Esc &nbsp;|&nbsp; Menu: M</p>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+   CARLOS VERSION  -  a monster-catching game where everything is Carlos
+   Everything lives in this one file. The DATA section right below is the
+   part you will want to edit to add more Carloses, moves and jokes.
+   ===================================================================== */
+
+// ----------------------------- DATA ----------------------------------
+// Type triangle: HYPE beats SNACK, SNACK beats CHILL, CHILL beats HYPE.
+const TYPES = {
+  HYPE:    { color:'#e2553a', beats:'SNACK' },
+  SNACK:   { color:'#d99a1e', beats:'CHILL' },
+  CHILL:   { color:'#3f86d6', beats:'HYPE'  },
+  REGULAR: { color:'#8d8d7c', beats:null    },
+};
+
+// kind: undefined = damage, or 'atkDown' | 'defDown' | 'heal'
+const MOVES = {
+  'Awkward Wave':     { type:'REGULAR', power:35, acc:100 },
+  'Finger Guns':      { type:'REGULAR', power:40, acc:100 },
+  'Be There In 5':    { type:'REGULAR', power:50, acc:90, flavor:'It was not there in 5.' },
+  'Dad Joke':         { type:'REGULAR', kind:'atkDown', acc:100, flavor:'The groan was audible.' },
+  'Bro Hug':          { type:'REGULAR', kind:'defDown', acc:100, flavor:'It went on a little too long.' },
+  'Traffic Excuse':   { type:'REGULAR', kind:'defDown', acc:100, flavor:'"There was traffic, I swear."' },
+  'Flex':             { type:'HYPE', power:40, acc:100 },
+  'Button Mash':      { type:'HYPE', power:40, acc:100 },
+  'Air Guitar':       { type:'HYPE', power:45, acc:100 },
+  'Leg Day':          { type:'HYPE', power:55, acc:95 },
+  'High Note':        { type:'HYPE', power:55, acc:90 },
+  'Rage Quit':        { type:'HYPE', power:60, acc:85 },
+  'Yawn':             { type:'CHILL', power:40, acc:100 },
+  'Long Sigh':        { type:'CHILL', power:35, acc:100 },
+  'Five More Minutes':{ type:'CHILL', power:55, acc:95 },
+  'Snooze Button':    { type:'CHILL', kind:'heal', acc:100 },
+  'Chip Toss':        { type:'SNACK', power:40, acc:100 },
+  'Crumb Storm':      { type:'SNACK', power:55, acc:95 },
+  'Hot Sauce':        { type:'SNACK', power:60, acc:85 },
+  'Low And Slow':     { type:'SNACK', power:50, acc:100 },
+  'Flame Broil':      { type:'SNACK', power:65, acc:90 },
+  'Extra Guac':       { type:'SNACK', kind:'heal', acc:100 },
+  'All You Can Eat':  { type:'SNACK', power:70, acc:90 },
+  'Lawn Mower':       { type:'REGULAR', power:55, acc:95 },
+  'Ghosted':          { type:'REGULAR', power:65, acc:95, flavor:'Left on read.' },
+  'Cast Line':        { type:'CHILL', power:45, acc:100 },
+  'Big Fish Story':   { type:'CHILL', kind:'atkDown', acc:100, flavor:'"It was THIS big."' },
+  'Sleepwalk Slam':   { type:'CHILL', power:70, acc:90 },
+  'Bass Drop':        { type:'HYPE', power:60, acc:90 },
+  'Protein Punch':    { type:'HYPE', power:70, acc:90 },
+};
+
+// look: how the Carlos is drawn (see drawCarlos). moves: [level learned, move]
+const SPECIES = {
+  gym:    { name:'GYM CARLOS', type:'HYPE', evolve:[14,'swole'], base:{hp:42,atk:54,def:44,spd:58}, exp:64, catch:.3,
+            desc:'Never skips leg day. Talks about it constantly.',
+            look:{shirt:'#d8402f',hat:'headband',hatColor:'#f4f4f4',item:'dumbbell',mouth:'smile'},
+            moves:[[1,'Finger Guns'],[1,'Dad Joke'],[7,'Flex'],[11,'Leg Day']] },
+  nap:    { name:'NAP CARLOS', type:'CHILL', evolve:[14,'snooze'], base:{hp:50,atk:46,def:54,spd:40}, exp:64, catch:.3,
+            desc:'Can fall asleep anywhere. Especially on your couch.',
+            look:{shirt:'#4a78c8',hat:'nightcap',hatColor:'#3558a8',item:'pillow',eyes:'sleepy',mouth:'open'},
+            moves:[[1,'Awkward Wave'],[1,'Bro Hug'],[7,'Yawn'],[11,'Snooze Button']] },
+  snack:  { name:'SNACK CARLOS', type:'SNACK', evolve:[14,'buffet'], base:{hp:46,atk:50,def:48,spd:48}, exp:64, catch:.3,
+            desc:'"Are you gonna finish that?" He already has.',
+            look:{shirt:'#e0a52e',item:'chips',mouth:'open'},
+            moves:[[1,'Finger Guns'],[1,'Bro Hug'],[7,'Chip Toss'],[11,'Crumb Storm']] },
+  late:   { name:'LATE CARLOS', type:'REGULAR', evolve:[12,'noshow'], base:{hp:38,atk:44,def:36,spd:62}, exp:52, catch:.4,
+            desc:'Says he is five minutes away. He has not left yet.',
+            look:{shirt:'#8a8f98',item:'watch',mouth:'flat'},
+            moves:[[1,'Awkward Wave'],[4,'Traffic Excuse'],[8,'Be There In 5']] },
+  hangry: { name:'HANGRY CARLOS', type:'SNACK', base:{hp:40,atk:50,def:36,spd:46}, exp:55, catch:.38,
+            desc:'Has not eaten since breakfast. Approach with fries.',
+            look:{shirt:'#b5462f',item:'fork',mouth:'frown'},
+            moves:[[1,'Awkward Wave'],[3,'Chip Toss'],[9,'Hot Sauce']] },
+  monday: { name:'MONDAY CARLOS', type:'CHILL', base:{hp:44,atk:42,def:46,spd:34}, exp:55, catch:.38,
+            desc:'Runs entirely on coffee and quiet resentment.',
+            look:{shirt:'#5d6b7a',item:'coffee',eyes:'sleepy',mouth:'flat',tie:true},
+            moves:[[1,'Long Sigh'],[5,'Dad Joke'],[9,'Five More Minutes']] },
+  gamer:  { name:'GAMER CARLOS', type:'HYPE', base:{hp:38,atk:52,def:38,spd:54}, exp:58, catch:.34,
+            desc:'"One more game." It is 4 a.m.',
+            look:{shirt:'#7a3fc0',hat:'headset',item:'controller',mouth:'smile'},
+            moves:[[1,'Finger Guns'],[4,'Button Mash'],[9,'Rage Quit']] },
+  karaoke:{ name:'KARAOKE CARLOS', type:'HYPE', base:{hp:46,atk:56,def:42,spd:50}, exp:75, catch:.2,
+            desc:'Rare. Appears after 11 p.m. Knows every word.',
+            look:{shirt:'#e05aa8',shades:true,item:'mic',mouth:'open'},
+            moves:[[1,'Air Guitar'],[1,'Dad Joke'],[8,'High Note']] },
+  // ---- Route 2
+  dad:    { name:'DAD CARLOS', type:'REGULAR', base:{hp:52,atk:48,def:52,spd:36}, exp:62, catch:.34,
+            desc:'Guards the thermostat with his life. "Hi Hungry, I\'m Carlos."',
+            look:{shirt:'#3f8f6a',glasses:true,mouth:'smile',pants:'#b8a888',item:'mug'},
+            moves:[[1,'Finger Guns'],[1,'Dad Joke'],[7,'Lawn Mower'],[11,'Bro Hug']] },
+  fishing:{ name:'FISHING CARLOS', type:'CHILL', base:{hp:48,atk:46,def:50,spd:38}, exp:62, catch:.34,
+            desc:'Has been sitting by the pond since dawn. Caught nothing. Happy.',
+            look:{shirt:'#6a8a5a',hat:'cap',hatColor:'#8a9a6a',item:'rod',mouth:'smile'},
+            moves:[[1,'Long Sigh'],[5,'Cast Line'],[9,'Big Fish Story'],[12,'Five More Minutes']] },
+  taco:   { name:'TACO CARLOS', type:'SNACK', base:{hp:44,atk:52,def:42,spd:50}, exp:64, catch:.32,
+            desc:'It is always Tuesday somewhere.',
+            look:{shirt:'#e07a2a',item:'taco',mouth:'open'},
+            moves:[[1,'Awkward Wave'],[4,'Chip Toss'],[8,'Extra Guac'],[11,'Hot Sauce']] },
+  dj:     { name:'DJ CARLOS', type:'HYPE', base:{hp:42,atk:56,def:40,spd:58}, exp:68, catch:.3,
+            desc:'Will play one more song. It is the same song.',
+            look:{shirt:'#22222c',hat:'headset',shades:true,mouth:'smile'},
+            moves:[[1,'Finger Guns'],[5,'Air Guitar'],[8,'Bass Drop']] },
+  bbq:    { name:'BBQ CARLOS', type:'SNACK', base:{hp:54,atk:58,def:50,spd:44}, exp:90, catch:.18,
+            desc:'Rare. Nobody else is allowed to touch the grill.',
+            look:{shirt:'#2c2c34',apron:true,hat:'cap',hatColor:'#f4f4f4',item:'fork',mouth:'smile'},
+            moves:[[1,'Finger Guns'],[5,'Chip Toss'],[9,'Low And Slow'],[11,'Flame Broil']] },
+  // ---- Glow-ups (evolutions)
+  swole:  { name:'SWOLE CARLOS', type:'HYPE', base:{hp:58,atk:72,def:58,spd:74}, exp:140, catch:.12,
+            desc:'His sleeves gave up. Still talks about leg day.',
+            look:{shirt:'#d8402f',sleeveless:true,hat:'headband',hatColor:'#f2c230',item:'dumbbell',mouth:'smile',wide:true},
+            moves:[[1,'Finger Guns'],[1,'Dad Joke'],[7,'Flex'],[11,'Leg Day'],[16,'Protein Punch']] },
+  snooze: { name:'SNOOZE CARLOS', type:'CHILL', base:{hp:68,atk:62,def:72,spd:52}, exp:140, catch:.12,
+            desc:'Has not been fully awake since 2019.',
+            look:{shirt:'#3558a8',hat:'nightcap',hatColor:'#7a3fc0',item:'pillow',eyes:'sleepy',mouth:'open',robe:true},
+            moves:[[1,'Awkward Wave'],[1,'Bro Hug'],[7,'Yawn'],[11,'Snooze Button'],[16,'Sleepwalk Slam']] },
+  buffet: { name:'BUFFET CARLOS', type:'SNACK', base:{hp:64,atk:68,def:64,spd:62}, exp:140, catch:.12,
+            desc:'The restaurant changed its all-you-can-eat policy because of him.',
+            look:{shirt:'#e0a52e',item:'chips',mouth:'open',wide:true,bib:true},
+            moves:[[1,'Finger Guns'],[1,'Bro Hug'],[7,'Chip Toss'],[11,'Crumb Storm'],[16,'All You Can Eat']] },
+  noshow: { name:'NO-SHOW CARLOS', type:'REGULAR', base:{hp:52,atk:62,def:50,spd:82}, exp:120, catch:.15,
+            desc:'"Something came up." Nothing came up.',
+            look:{shirt:'#55585f',shades:true,item:'watch',mouth:'flat'},
+            moves:[[1,'Awkward Wave'],[4,'Traffic Excuse'],[8,'Be There In 5'],[14,'Ghosted']] },
+};
+
+// Wild Carloses on Route 1: [species, weight, minLevel, maxLevel]
+const ROUTE1 = [['late',35,2,4],['hangry',25,2,4],['monday',20,3,4],['gamer',15,3,5],['karaoke',5,4,5]];
+const ROUTE2 = [['dad',28,5,7],['fishing',24,5,7],['taco',22,5,8],['dj',16,6,8],['monday',5,6,7],['bbq',5,7,8]];
+
+const PRICES = { ball:100, cola:80 };
+const COLA_HEAL = 20;
+
+// How the people in the world look
+const LOOKS = {
+  player:  { shirt:'#d83a3a', hat:'cap', hatColor:'#d83a3a' },
+  mom:     { shirt:'#e88fb0', longHair:true, apron:true, mouth:'smile' },
+  prof:    { shirt:'#7a5a3a', coat:true, hair:'#a8a8a8', glasses:true },
+  rival:   { shirt:'#3a5fd8', spiky:true, mouth:'smile' },
+  worried: { shirt:'#6aa84f', mouth:'open' },
+  clerk:   { shirt:'#2aa198', hat:'cap', hatColor:'#2aa198', mouth:'smile' },
+  nurse:   { shirt:'#f4a6c0', hat:'cap', hatColor:'#f4f4f4', mouth:'smile' },
+  builder: { shirt:'#f08a20', hat:'cap', hatColor:'#f2c230' },
+  kid:     { shirt:'#f0d020', hat:'cap', hatColor:'#3a5fd8' },
+  jogger:  { shirt:'#30b8b8', hat:'headband', hatColor:'#e2553a' },
+  towny1:  { shirt:'#9a6ad0' },
+  towny2:  { shirt:'#c0c0c0', shades:true },
+  hiker:   { shirt:'#8c6239', hat:'cap', hatColor:'#6aa84f' },
+  angler:  { shirt:'#6a8a5a', hat:'cap', hatColor:'#8a9a6a' },
+  party:   { shirt:'#e05aa8', shades:true, mouth:'smile' },
+  cook:    { shirt:'#f4f4f4', hat:'cap', hatColor:'#f4f4f4' },
+  leader:  { shirt:'#2c2c34', apron:true, hat:'cap', hatColor:'#f4f4f4', mouth:'smile' },
+  guide:   { shirt:'#3a5fd8', glasses:true, mouth:'smile' },
+};
+
+// --------------------------- ENGINE SETUP -----------------------------
+const T=16, VW=15, VH=11, W=VW*T, H=VH*T, SCALE=3;
+const cv=document.getElementById('screen'), ctx=cv.getContext('2d');
+const DIRS={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+const OPP={up:'down',down:'up',left:'right',right:'left'};
+const SAVE_KEY='carlos-version-save-v1';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const rnd=n=>Math.floor(Math.random()*n);
+const pick=a=>a[rnd(a.length)];
+
+let G=null;            // saved game state
+let scene='title';     // 'title' | 'world' | 'battle'
+let busy=false;        // a script (dialog, battle...) is running
+let mv=null;           // current walking step {dx,dy,t}
+let B=null;            // current battle
+let frame=0;
+const ui={text:null,menus:[]};
+const fx={a:0};
+const banner={text:'',t:0};
+const held={};
+
+function freshGame(){
+  return { map:'house', x:7, y:2, dir:'down', party:[], box:[], bag:{ball:0,cola:1}, money:500,
+           flags:{}, beaten:{}, badges:[], ret:null, heal:{map:'house',x:4,y:4} };
+}
+
+// ------------------------------ MAPS ----------------------------------
+const MAPS={};
+(function buildWorld(){
+  const OW=30, OH=64, m=[];
+  for(let y=0;y<OH;y++) m.push(Array(OW).fill('#'));
+  const rect=(x,y,w,h,c)=>{for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)m[j][i]=c;};
+  const put=(x,y,c)=>{m[y][x]=c;};
+  const bld=(x,y,w,roof,doorX,doorCh)=>{
+    rect(x,y,w,2,roof);
+    for(let i=0;i<w;i++) put(x+i,y+2,(x+i===doorX)?(doorCh||'D'):(i%2?'w':'W'));
+  };
+  rect(2,2,OW-4,OH-4,'.');
+
+  // ---- CARLOS CITY (y 2..19)
+  rect(14,5,2,15,',');  rect(4,9,22,2,',');
+  rect(10,4,10,1,'F');  put(14,4,','); put(14,3,','); put(14,2,','); put(14,1,',');
+  bld(5,6,6,'b',7);            // CarlosMart
+  bld(18,6,6,'r',20);          // CarlosCenter
+  bld(5,14,5,'o',7,'d');       // somebody's house (locked)
+  rect(19,13,6,4,'~');
+  put(12,11,'S');
+  [[3,3],[4,3],[24,3],[25,4],[11,13],[12,14],[3,18],[25,18],[17,17],[18,18],[3,12]].forEach(([x,y])=>put(x,y,'f'));
+
+  // ---- ROUTE 1 (y 20..43)
+  rect(2,20,8,24,'#'); rect(20,20,8,24,'#');
+  rect(10,20,4,1,'#'); rect(16,20,4,1,'#');
+  rect(10,43,4,1,'#'); rect(15,43,5,1,'#');
+  for(let y=21;y<43;y++){ put(14,y,','); put(15,y,','); }
+  rect(10,38,5,4,':'); rect(15,38,5,2,'#');
+  rect(15,31,5,5,':'); rect(10,33,5,2,'#');
+  rect(10,24,6,4,':');
+  [[11,22],[18,26],[19,41],[10,30],[11,36]].forEach(([x,y])=>put(x,y,'f'));
+  put(14,43,',');
+
+  // ---- CARLOSVILLE (y 44..61)
+  rect(14,44,1,6,',');  rect(4,50,20,2,',');
+  rect(20,52,2,7,',');  rect(12,57,10,2,',');
+  bld(5,47,5,'r',7);           // your house
+  bld(19,47,5,'b',21,'d');     // rival's house (locked)
+  bld(11,54,8,'g',14);         // Professor Carlos's lab
+  rect(2,60,26,2,'~');
+  put(10,49,'S'); put(24,49,'S'); put(19,56,'S'); put(13,44,'S'); put(10,52,'S');
+  rect(3,54,6,1,'F'); rect(23,54,4,1,'F');
+  [[3,45],[4,46],[25,45],[26,46],[4,56],[5,57],[6,56],[24,56],[25,57],[3,52],[26,52],[17,45],[18,46]].forEach(([x,y])=>put(x,y,'f'));
+
+  MAPS.world={rows:m.map(r=>r.join('')),outside:true};
+})();
+(function buildNorth(){
+  const OW=30, OH=52, m=[];
+  for(let y=0;y<OH;y++) m.push(Array(OW).fill('#'));
+  const rect=(x,y,w,h,c)=>{for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)m[j][i]=c;};
+  const put=(x,y,c)=>{m[y][x]=c;};
+  const bld=(x,y,w,roof,doorX,doorCh)=>{
+    rect(x,y,w,2,roof);
+    for(let i=0;i<w;i++) put(x+i,y+2,(x+i===doorX)?(doorCh||'D'):(i%2?'w':'W'));
+  };
+  rect(2,2,OW-4,OH-4,'.');
+  // ---- ROUTE 2 (y 26..49): tall grass on the west side of the pond, trainers on the east
+  rect(2,26,6,24,'#'); rect(22,26,6,24,'#');
+  rect(8,26,6,1,'#'); rect(16,26,6,1,'#');
+  rect(14,41,2,9,','); rect(14,27,2,9,','); put(14,50,','); put(14,51,',');
+  rect(12,36,6,5,'~');
+  rect(8,34,4,9,':'); rect(8,44,5,3,':'); rect(16,28,6,4,':');
+  rect(18,36,4,5,','); rect(16,41,6,1,','); rect(16,35,6,1,',');
+  rect(8,32,3,1,'#'); rect(17,45,5,1,'F');
+  [[9,29],[10,30],[12,28],[20,47],[19,48],[9,48],[21,33]].forEach(([x,y])=>put(x,y,'f'));
+  put(16,48,'S');
+  // ---- SAN CARLOS (y 2..25)
+  rect(14,7,2,19,','); rect(4,17,22,2,','); rect(10,7,10,2,',');
+  bld(10,4,10,'v',14);         // the Gym
+  bld(4,14,6,'r',6);           // CarlosCenter
+  bld(20,14,6,'b',22);         // CarlosMart
+  bld(4,21,5,'o',6,'d');
+  rect(20,21,5,3,'~');
+  put(12,9,'S'); put(16,24,'S');
+  rect(3,10,5,1,'F'); rect(22,10,5,1,'F');
+  [[3,3],[4,4],[25,3],[24,4],[3,12],[26,12],[11,21],[12,22],[17,21],[18,12],[9,11],[25,25],[3,25]].forEach(([x,y])=>put(x,y,'f'));
+  MAPS.north={rows:m.map(r=>r.join('')),outside:true};
+})();
+MAPS.gym={rows:[
+  'XXXXXXXXXXXX',
+  'XQ________QX',
+  'X__________X',
+  'X__________X',
+  'XTTTT__TTTTX',
+  'X__________X',
+  'X__________X',
+  'Xp________pX',
+  'XXXXXMMXXXXX']};
+MAPS.house={rows:[
+  'XXXXXXXXXX',
+  'XKK____B_X',
+  'X________X',
+  'X__TT____X',
+  'X________X',
+  'X_______pX',
+  'XXXXMMXXXX']};
+MAPS.lab={rows:[
+  'XXXXXXXXXXXX',
+  'XKKKK__KKKKX',
+  'X__________X',
+  'X___TTT____X',
+  'X__________X',
+  'Xp________pX',
+  'X__________X',
+  'XXXXXMMXXXXX']};
+MAPS.mart={rows:[
+  'XXXXXXXX',
+  'XKKKKKKX',
+  'X______X',
+  'XCC____X',
+  'X______X',
+  'X_____pX',
+  'XXXMMXXX']};
+MAPS.center={rows:[
+  'XXXXXXXX',
+  'XH___PpX',
+  'X______X',
+  'XCCCC__X',
+  'X______X',
+  'X______X',
+  'XXXMMXXX']};
+
+const WARPS={   // step on a door -> go inside
+  'world:7,49': {map:'house', x:4,y:5,dir:'up'},
+  'world:14,56':{map:'lab',   x:5,y:6,dir:'up'},
+  'world:7,8':  {map:'mart',  x:3,y:5,dir:'up'},
+  'world:20,8': {map:'center',x:3,y:5,dir:'up'},
+  'world:14,1': {map:'north', x:14,y:50,dir:'up'},
+  'north:14,51':{map:'world', x:14,y:2,dir:'down'},
+  'north:14,6': {map:'gym',   x:5,y:7,dir:'up'},
+  'north:6,16': {map:'center',x:3,y:5,dir:'up'},
+  'north:22,16':{map:'mart',  x:3,y:5,dir:'up'},
+};
+const EXITS={   // step on a doormat -> go outside
+  house:{map:'world',x:7,y:50,dir:'down'},
+  lab:{map:'world',x:14,y:57,dir:'down'},
+  mart:{map:'world',x:7,y:9,dir:'down'},
+  center:{map:'world',x:20,y:9,dir:'down'},
+  gym:{map:'north',x:14,y:7,dir:'down'},
+};
+const SIGNS={
+  '10,49':"CARLOS's HOUSE. (That's you. You're Carlos.)",
+  '24,49':"RIVAL CARLOS's HOUSE.",
+  '19,56':"PROFESSOR CARLOS's CARLOS RESEARCH LAB.",
+  '13,44':'ROUTE 1. North: CARLOS CITY.',
+  '10,52':'CARLOSVILLE. Population: Carlos.',
+  '12,11':'CARLOS CITY. Now with 100% more Carlos.',
+  'north:16,48':'ROUTE 2. North: SAN CARLOS. Trainers on the east path, tall grass on the west.',
+  'north:12,9':'SAN CARLOS GYM. Leader: GRILLMASTER CARLOS. "Low and slow."',
+  'north:16,24':'SAN CARLOS. Smells faintly of barbecue at all times.',
+};
+const LABELS=[{map:'world',x:5,y:7,w:6,text:'MART'},{map:'world',x:18,y:7,w:6,text:'CENTER'},{map:'world',x:11,y:55,w:8,text:'LAB'},
+  {map:'north',x:10,y:5,w:10,text:'GYM'},{map:'north',x:4,y:15,w:6,text:'CENTER'},{map:'north',x:20,y:15,w:6,text:'MART'}];
+const SOLID=new Set('#~FSrbgovWwdXTBCKHpQP'.split(''));
+
+function tileAt(map,x,y){ const r=MAPS[map].rows[y]; return (r&&r[x])||'#'; }
+function areaName(){
+  if(G.map==='world') return G.y<20?'CARLOS CITY':G.y<44?'ROUTE 1':'CARLOSVILLE';
+  if(G.map==='north') return G.y<26?'SAN CARLOS':'ROUTE 2';
+  return {gym:'SAN CARLOS GYM',house:'YOUR HOUSE',lab:"PROF. CARLOS's LAB",mart:'CARLOSMART',center:'CARLOSCENTER'}[G.map];
+}
+
+// ---------------------------- MONSTERS --------------------------------
+const nm=m=>SPECIES[m.sp].name;
+function stat(m,k){
+  const b=SPECIES[m.sp].base[k];
+  return k==='hp' ? Math.floor(b*2*m.lvl/100)+m.lvl+10 : Math.floor(b*2*m.lvl/100)+5;
+}
+function makeMon(sp,lvl){
+  const m={sp,lvl,exp:lvl**3,moves:[]};
+  for(const [l,mvn] of SPECIES[sp].moves) if(l<=lvl) m.moves.push(mvn);
+  m.moves=m.moves.slice(-4);
+  m.hp=stat(m,'hp');
+  return m;
+}
+function healAll(){ G.party.forEach(m=>m.hp=stat(m,'hp')); }
+function typeMult(a,d){ if(TYPES[a].beats===d) return 2; if(TYPES[d].beats===a) return .5; return 1; }
+function wildMon(){
+  const tb=G.map==='north'?ROUTE2:ROUTE1;
+  let r=Math.random()*tb.reduce((s,e)=>s+e[1],0);
+  for(const [sp,w,lo,hi] of tb){ if((r-=w)<0) return makeMon(sp,lo+rnd(hi-lo+1)); }
+  return makeMon('late',3);
+}
+const partyLabel=m=>`${nm(m).padEnd(15)}L${String(m.lvl).padEnd(3)}${m.hp<=0?'FAINTED':m.hp+'/'+stat(m,'hp')}`;
+
+// ------------------------- TEXT + MENUS -------------------------------
+const FONT='bold 9px ui-monospace,Menlo,Consolas,monospace';
+function paginate(text){
+  ctx.font=FONT;
+  const lines=[]; let cur='';
+  for(const word of String(text).split(' ')){
+    const t=cur?cur+' '+word:word;
+    if(ctx.measureText(t).width>220/1 && cur){ lines.push(cur); cur=word; } else cur=t;
+  }
+  if(cur) lines.push(cur);
+  const pages=[]; for(let i=0;i<lines.length;i+=3) pages.push(lines.slice(i,i+3));
+  return pages.length?pages:[['']];
+}
+function say(text){ return new Promise(res=>{ ui.text={pages:paginate(text),page:0,n:0,res,wait:true}; }); }
+function setText(text){ ui.text={pages:paginate(text),page:0,n:999,res:null,wait:false}; }
+function menu(opts,o={}){
+  return new Promise(res=>{ ui.menus.push({opts,sel:o.sel||0,x:o.x,y:o.y,w:o.w||64,cancel:o.cancel!==false,res}); });
+}
+async function yesNo(q){ setText(q); return (await menu(['YES','NO']))===0; }
+async function pickMon(title){
+  setText(title);
+  return menu(G.party.map(partyLabel),{x:8,y:6,w:224});
+}
+async function script(fn){
+  if(busy) return;
+  busy=true;
+  try{ await fn(); }catch(e){ console.error(e); }
+  finally{ busy=false; ui.text=null; ui.menus.length=0; }
+}
+async function fadeTo(v){
+  const from=fx.a;
+  for(let i=1;i<=8;i++){ fx.a=from+(v-from)*i/8; await sleep(22); }
+}
+
+// ------------------------------ INPUT ---------------------------------
+const KEYMAP={arrowup:'up',arrowdown:'down',arrowleft:'left',arrowright:'right',w:'up',s:'down',a:'left',d:'right',
+  z:'A',' ':'A',enter:'A',x:'B',escape:'B',backspace:'B',m:'START'};
+window.addEventListener('keydown',e=>{
+  const b=KEYMAP[e.key.toLowerCase()]; if(!b) return;
+  e.preventDefault(); if(e.repeat) return; held[b]=true; onPress(b);
+});
+window.addEventListener('keyup',e=>{ const b=KEYMAP[e.key.toLowerCase()]; if(b) held[b]=false; });
+window.addEventListener('blur',()=>{ for(const k in held) held[k]=false; });
+document.querySelectorAll('[data-btn]').forEach(el=>{
+  const b=el.dataset.btn;
+  const down=e=>{ e.preventDefault(); held[b]=true; el.classList.add('on'); onPress(b); };
+  const up=e=>{ e.preventDefault(); held[b]=false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown',down); el.addEventListener('pointerup',up);
+  el.addEventListener('pointerleave',up); el.addEventListener('pointercancel',up);
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+});
+
+function onPress(b){
+  const mn=ui.menus[ui.menus.length-1];
+  if(mn){
+    if(b==='up') mn.sel=(mn.sel+mn.opts.length-1)%mn.opts.length;
+    else if(b==='down') mn.sel=(mn.sel+1)%mn.opts.length;
+    else if(b==='A'){ ui.menus.pop(); mn.res(mn.sel); }
+    else if(b==='B'&&mn.cancel){ ui.menus.pop(); mn.res(-1); }
+    return;
+  }
+  const t=ui.text;
+  if(t&&t.wait){
+    if(b!=='A'&&b!=='B') return;
+    const len=t.pages[t.page].join('').length;
+    if(t.n<len) t.n=999;
+    else if(t.page<t.pages.length-1){ t.page++; t.n=0; }
+    else { t.wait=false; const r=t.res; t.res=null; r(); }
+    return;
+  }
+  if(busy) return;
+  if(scene==='title'){ if(b==='A'||b==='START') script(titleMenu); return; }
+  if(scene==='world'&&!mv){
+    if(b==='A') interact();
+    else if(b==='START') script(startMenu);
+  }
+}
+
+// --------------------------- ENTITIES ---------------------------------
+const rivalPick=sp=>({gym:'nap',nap:'snack',snack:'gym'})[sp];   // rival takes the Carlos that beats yours
+
+function ballEnt(sp,x){
+  return { kind:'ball', map:'lab', x, y:3, hidden:()=>G.flags.starter===sp||G.flags.rival===sp,
+    talk:async()=>{
+      if(G.flags.starter){ await say("That's Professor Carlos's last Carlos. Better leave it."); return; }
+      if(!G.flags.metProf){ await say('Better talk to Professor Carlos first.'); return; }
+      const s=SPECIES[sp];
+      await say(`It's ${s.name}, the ${s.type}-type Carlos. ${s.desc}`);
+      if(!(await yesNo(`Choose ${s.name}?`))) return;
+      G.party.push(makeMon(sp,5)); G.flags.starter=sp;
+      await say(`You received ${s.name}!`);
+      const r=rivalPick(sp); G.flags.rival=r;
+      await say(`RIVAL CARLOS: Then I'm taking ${SPECIES[r].name}!`);
+      await say("RIVAL CARLOS: Hey, Carlos! Let's find out whose Carlos is the most Carlos!");
+      const res=await battle({name:'RIVAL CARLOS',party:[makeMon(r,5)],prize:175});
+      healAll();
+      await say(res==='win'?'RIVAL CARLOS: What?! I picked the wrong Carlos...':"RIVAL CARLOS: Ha! I'm the superior Carlos!");
+      await say("PROF. CARLOS: Splendid, Carloses! I've patched your Carlos up, good as new.");
+      await say('PROF. CARLOS: Head north through ROUTE 1 to CARLOS CITY. The CARLOSMART there sells CARLOSBALLS. With those, you can catch wild Carloses of your own!');
+      await say('RIVAL CARLOS: Later, Carlos. Try to keep up!');
+      G.flags.rivalGone=true;
+    } };
+}
+
+const ENT=[
+  { map:'house',x:2,y:3,dir:'right',look:LOOKS.mom, talk:async()=>{
+      if(!G.flags.starter){ await say('MOM CARLOS: Morning, Carlos! Professor Carlos was asking for you. His lab is the big grey building south of here.'); return; }
+      healAll();
+      await say('MOM CARLOS: You and your Carloses look tired. Sit down a minute.');
+      await say('Your Carloses are fully rested!');
+    } },
+  { map:'lab',x:8,y:2,dir:'down',look:LOOKS.prof, talk:async()=>{
+      if(!G.flags.metProf){
+        G.flags.metProf=true;
+        await say("PROF. CARLOS: Ah, Carlos! There you are. I'm Professor Carlos.");
+        await say('PROF. CARLOS: This world is full of creatures we call... Carloses. Some people keep them as friends. Others make them battle.');
+        await say('PROF. CARLOS: I have three right here on the table. Go on, pick one!');
+      } else if(!G.flags.starter){
+        await say('PROF. CARLOS: Go on, pick a Carlos from the table.');
+      } else if(!G.flags.freeBalls){
+        await say('PROF. CARLOS: Head north to CARLOS CITY and visit the CARLOSMART. You will want CARLOSBALLS.');
+      } else {
+        await say(`PROF. CARLOS: You have ${G.party.length+G.box.length} Carlos${G.party.length+G.box.length===1?'':'es'}. Wonderful! Weaken wild ones before you throw a CARLOSBALL.`);
+      }
+    } },
+  { map:'lab',x:9,y:4,dir:'left',look:LOOKS.rival, hidden:()=>G.flags.rivalGone, talk:async()=>{
+      await say(G.flags.metProf?"RIVAL CARLOS: Hurry up and pick, Carlos. I'm getting old here.":'RIVAL CARLOS: Finally! Professor Carlos has been waiting for you, Carlos.');
+    } },
+  ballEnt('gym',4), ballEnt('nap',5), ballEnt('snack',6),
+
+  { map:'world',x:14,y:43,dir:'down',look:LOOKS.worried, hidden:()=>G.flags.starter, talk:async()=>{
+      await say("WORRIED CARLOS: Whoa! Wild Carloses live in the tall grass! It's not safe without a Carlos of your own.");
+      await say("WORRIED CARLOS: Go see Professor Carlos in his lab first.");
+    } },
+  { map:'world',x:16,y:45,dir:'left',look:LOOKS.worried, hidden:()=>!G.flags.starter, talk:async()=>{
+      await say('RELIEVED CARLOS: Oh good, you have a Carlos now. Mind the tall grass on ROUTE 1!');
+    } },
+  { map:'world',x:8,y:53,dir:'down',look:LOOKS.towny1, talk:async()=>{
+      await say("NEIGHBOR CARLOS: Nice day, isn't it, Carlos? Tell your mom Carlos says hi.");
+    } },
+
+  { id:'t1', map:'world',x:12,y:36,dir:'right',look:LOOKS.kid,
+    trainer:{name:'YOUNGSTER CARLOS',party:[['late',3]],prize:60,
+      intro:'YOUNGSTER CARLOS: Hey! I just caught my first Carlos! Battle me!',
+      outro:'YOUNGSTER CARLOS: My Carlos was late to his own battle...'} },
+  { id:'t2', map:'world',x:17,y:29,dir:'down',look:LOOKS.jogger,
+    trainer:{name:'JOGGER CARLOS',party:[['gamer',4],['hangry',3]],prize:90,
+      intro:"JOGGER CARLOS: Cardio break! Let's battle!",
+      outro:'JOGGER CARLOS: Whew. I should have stretched first.'} },
+
+  { map:'world',x:14,y:4,dir:'down',look:LOOKS.builder, hidden:()=>G.flags.freeBalls, talk:async()=>{
+      await say("CONSTRUCTION CARLOS: Still paving ROUTE 2, Carlos. Give me a minute. Go check out the CARLOSMART while you wait.");
+    } },
+  { map:'world',x:13,y:6,dir:'right',look:LOOKS.builder, hidden:()=>!G.flags.freeBalls, talk:async()=>{
+      await say("CONSTRUCTION CARLOS: ROUTE 2 is open! SAN CARLOS is up north. They have a GYM there, if you think you're tough.");
+    } },
+  { id:'t3', map:'north',x:20,y:42,dir:'left',look:LOOKS.hiker,
+    trainer:{name:'HIKER CARLOS',party:[['dad',6],['late',6]],prize:120,
+      intro:'HIKER CARLOS: I walked all the way here just to battle you!',
+      outro:'HIKER CARLOS: Should have brought better snacks.'} },
+  { id:'t4', map:'north',x:19,y:35,dir:'down',look:LOOKS.angler,
+    trainer:{name:'ANGLER CARLOS',party:[['fishing',7]],prize:140,
+      intro:'ANGLER CARLOS: Shh! You scared the fish! Now you have to battle me.',
+      outro:'ANGLER CARLOS: There were never any fish.'} },
+  { id:'t5', map:'north',x:11,y:30,dir:'right',look:LOOKS.party,
+    trainer:{name:'PARTY CARLOS',party:[['dj',7],['gamer',6]],prize:160,
+      intro:"PARTY CARLOS: Carlooos! You made it! Battle time!",
+      outro:'PARTY CARLOS: Okay, okay. After-party at my place.'} },
+  { map:'north',x:10,y:19,dir:'down',look:LOOKS.towny2, talk:async()=>{
+      await say("LOCAL CARLOS: GRILLMASTER CARLOS runs the GYM. His SNACK-type Carloses hit hard. Bring a HYPE-type and leave your CHILL ones at home.");
+    } },
+  { map:'north',x:18,y:11,dir:'left',look:LOOKS.towny1, talk:async()=>{
+      await say('SAN CARLOS CARLOS: Some Carloses have a GLOW-UP when they reach a high enough level. Mine got a gym membership and everything.');
+    } },
+  { map:'north',x:9,y:24,dir:'right',look:LOOKS.kid, talk:async()=>{
+      await say('KID CARLOS: Hold B (or X) to run! I learned that today.');
+    } },
+  { map:'gym',x:7,y:7,dir:'left',look:LOOKS.guide, talk:async()=>{
+      await say(G.badges.includes('TONG BADGE')?'GYM GUIDE CARLOS: You did it, Carlos! I always believed in you. Mostly.':
+        "GYM GUIDE CARLOS: Yo, future champ! GRILLMASTER CARLOS uses SNACK-types. HYPE moves burn right through them. CHILL Carloses will get roasted.");
+    } },
+  { id:'g1', map:'gym',x:2,y:5,dir:'right',look:LOOKS.cook,
+    trainer:{name:'LINE COOK CARLOS',party:[['hangry',8],['taco',8]],prize:200,
+      intro:'LINE COOK CARLOS: Nobody sees the GRILLMASTER without going through me. Order up!',
+      outro:'LINE COOK CARLOS: 86 me. I am out.'} },
+  { id:'gym1', map:'gym',x:5,y:2,dir:'down',look:LOOKS.leader,
+    trainer:{name:'GRILLMASTER CARLOS',noSight:true,party:[['hangry',9],['taco',10],['bbq',12]],prize:500,
+      intro:"GRILLMASTER CARLOS: So you're the Carlos everyone's talking about. I'm GRILLMASTER CARLOS, leader of the SAN CARLOS GYM. Let's see if you can stand the heat!",
+      outro:'GRILLMASTER CARLOS: Well done. Medium-well, even.',
+      after:'GRILLMASTER CARLOS: You earned that badge, Carlos. Burger? They are almost ready. They have been almost ready for an hour.',
+      onWin:async()=>{
+        G.badges.push('TONG BADGE'); G.bag.ball+=5;
+        await say('You received the TONG BADGE from GRILLMASTER CARLOS!');
+        await say('GRILLMASTER CARLOS: Take these 5 CARLOSBALLS too. There are more gyms out there, and more Carloses than you can imagine.');
+        await say('That is the end of the road for now. More Carlos coming soon!');
+        save();
+      } } },
+  { map:'world',x:10,y:12,dir:'down',look:LOOKS.towny1, talk:async()=>{
+      await say('CITY CARLOS: Tip from one Carlos to another: wear a wild Carlos down before throwing a CARLOSBALL. A tired Carlos is an easy Carlos.');
+    } },
+  { map:'world',x:22,y:11,dir:'down',look:LOOKS.towny2, talk:async()=>{
+      await say('COOL CARLOS: HYPE beats SNACK. SNACK beats CHILL. CHILL beats HYPE. Write that down.');
+    } },
+
+  { map:'mart',x:1,y:2,dir:'down',look:LOOKS.clerk, talk:shop },
+  { map:'center',x:2,y:2,dir:'down',look:LOOKS.nurse, talk:async()=>{
+      await say('NURSE CARLOS: Welcome to the CARLOSCENTER! Let me take a look at your Carloses.');
+      await fadeTo(.7); await sleep(500); healAll(); await fadeTo(0);
+      G.heal={map:'center',x:2,y:4,ret:G.ret};
+      await say('NURSE CARLOS: All better! Your Carloses are in peak Carlos condition.');
+      save();
+    } },
+];
+const visible=e=>!(e.hidden&&e.hidden());
+const entityAt=(map,x,y)=>ENT.find(e=>e.map===map&&e.x===x&&e.y===y&&visible(e));
+
+async function shop(){
+  if(!G.flags.freeBalls){
+    G.flags.freeBalls=true; G.bag.ball+=3;
+    await say('CLERK CARLOS: Welcome to the CARLOSMART! First time? Here, 3 CARLOSBALLS on the house.');
+    await say('You got 3 CARLOSBALLS! Throw them at wild Carloses to catch them.');
+  } else await say('CLERK CARLOS: Welcome back to the CARLOSMART!');
+  while(true){
+    setText(`Money: $${G.money}   CARLOSBALLS: ${G.bag.ball}   COLAS: ${G.bag.cola}`);
+    const c=await menu([`CARLOSBALL   $${PRICES.ball}`,`CARLOS COLA  $${PRICES.cola}`,'LEAVE'],{w:124});
+    if(c<0||c===2) break;
+    const key=c===0?'ball':'cola';
+    if(G.money<PRICES[key]){ await say("CLERK CARLOS: You don't have enough money, Carlos."); continue; }
+    G.money-=PRICES[key]; G.bag[key]++;
+  }
+  await say('CLERK CARLOS: Come again, Carlos!');
+}
+
+// ---------------------------- OVERWORLD -------------------------------
+function canWalk(map,x,y){
+  const m=MAPS[map]; if(y<0||y>=m.rows.length||x<0||x>=m.rows[0].length) return false;
+  return !SOLID.has(m.rows[y][x]) && !entityAt(map,x,y);
+}
+function tryMove(dir){
+  G.dir=dir; const [dx,dy]=DIRS[dir];
+  if(canWalk(G.map,G.x+dx,G.y+dy)) mv={dx,dy,t:0};
+}
+function showBanner(){ const n=areaName(); if(n!==banner.text){ banner.text=n; banner.t=130; } }
+async function warpTo(w){
+  await fadeTo(1);
+  if(!MAPS[w.map].outside) G.ret={map:G.map,x:G.x,y:G.y+1,dir:'down'};
+  G.map=w.map; G.x=w.x; G.y=w.y; G.dir=w.dir;
+  showBanner();
+  await fadeTo(0);
+}
+function arrive(){
+  const w=WARPS[G.map+':'+G.x+','+G.y];
+  if(w){ script(()=>warpTo(w)); return; }
+  const t=tileAt(G.map,G.x,G.y);
+  if(t==='M'){ script(()=>warpTo(G.ret||EXITS[G.map])); return; }
+  showBanner();
+  if(checkTrainers()) return;
+  if(t===':'&&G.party.length&&Math.random()<.13){
+    script(async()=>{ const r=await battle({wild:true,party:[wildMon()]}); if(r==='lose') await blackout(); });
+  }
+}
+function checkTrainers(){
+  for(const e of ENT){
+    if(e.map!==G.map||!e.trainer||e.trainer.noSight||G.beaten[e.id]) continue;
+    const [dx,dy]=DIRS[e.dir];
+    for(let i=1;i<=4;i++){
+      const x=e.x+dx*i,y=e.y+dy*i;
+      if(x===G.x&&y===G.y){ script(()=>trainerBattle(e,true)); return true; }
+      if(SOLID.has(tileAt(e.map,x,y))) break;
+    }
+  }
+  return false;
+}
+async function trainerBattle(e,spotted){
+  if(spotted){ e.alert=frame+45; await sleep(700); }
+  const tr=e.trainer;
+  await say(tr.intro);
+  const r=await battle({name:tr.name,party:tr.party.map(([sp,l])=>makeMon(sp,l)),prize:tr.prize});
+  if(r==='win'){ G.beaten[e.id]=true; await say(tr.outro); if(tr.onWin) await tr.onWin(); }
+  else await blackout();
+}
+async function blackout(){
+  await fadeTo(1);
+  G.map=G.heal.map; G.x=G.heal.x; G.y=G.heal.y; G.dir='down'; G.ret=G.heal.ret||null;
+  healAll(); banner.text='';
+  await fadeTo(0);
+  await say('You hurried back to safety. Your Carloses are rested and ready to go again!');
+}
+function interact(){
+  const [dx,dy]=DIRS[G.dir]; let x=G.x+dx,y=G.y+dy;
+  let t=tileAt(G.map,x,y), e=entityAt(G.map,x,y);
+  if(!e&&t==='C') e=entityAt(G.map,x+dx,y+dy);     // talk across a counter
+  if(e){
+    if(e.look) e.dir=OPP[G.dir];
+    if(e.trainer) script(G.beaten[e.id]?()=>say(e.trainer.after||e.trainer.outro):()=>trainerBattle(e,false));
+    else script(e.talk);
+    return;
+  }
+  const msg={
+    S:SIGNS[G.map+':'+x+','+y]||SIGNS[x+','+y], P:null, Q:'A grill. It is hot. Do not touch the grill.', d:"It's locked. Nobody's home.", K:'Shelves full of books about Carlos. All of them.',
+    B:"Your bed. No time for a nap, there are Carloses out there.", H:'A machine that goes "ding" when your Carloses are healed.',
+    p:'A houseplant. It is not a Carlos. Probably.', '~':'The water looks cold. Carlos-cold.',
+    T:G.map==='house'?'Mom Carlos left you a note: "Go see Professor Carlos!"':null,
+  }[t];
+  if(t==='P'){ script(pcMenu); return; }
+  if(msg) script(()=>say(msg));
+}
+
+async function startMenu(){
+  while(true){
+    ui.text=null;
+    const c=await menu(['CARLOSES','BAG','CARD','SAVE','CLOSE'],{x:164,y:6,w:70});
+    if(c===0){
+      if(!G.party.length){ await say("You don't have any Carloses yet."); continue; }
+      const i=await pickMon('Your Carloses. Pick one for details.');
+      if(i<0) continue;
+      const m=G.party[i], s=SPECIES[m.sp];
+      await say(`${s.name}: ${s.type} type, level ${m.lvl}. Moves: ${m.moves.join(', ')}. ${s.desc}`);
+      if(i>0 && await yesNo(`Put ${s.name} at the front of your party?`)){ G.party.splice(i,1); G.party.unshift(m); }
+    } else if(c===1){
+      setText(`Money: $${G.money}   CARLOSBALLS: ${G.bag.ball}   CARLOS COLAS: ${G.bag.cola}`);
+      const j=await menu(['USE COLA','BACK'],{w:76});
+      if(j===0){
+        if(!G.bag.cola){ await say('You have no CARLOS COLA.'); continue; }
+        if(!G.party.length){ await say('Nobody to give it to.'); continue; }
+        const i=await pickMon('Give CARLOS COLA to which Carlos?');
+        if(i>=0) await useCola(G.party[i]);
+      }
+    } else if(c===2){
+      await say(`TRAINER: CARLOS.  Money: $${G.money}.  Carloses owned: ${G.party.length+G.box.length}.  Badges: ${G.badges.length?G.badges.join(', '):'none yet'}.`);
+    } else if(c===3){
+      await say(save()?'Game saved!':'Could not save in this browser.');
+    } else break;
+  }
+}
+async function pcMenu(){
+  await say("You booted up the CARLOS STORAGE SYSTEM.");
+  while(true){
+    setText(`In storage: ${G.box.length}   In party: ${G.party.length}/6`);
+    const c=await menu(['WITHDRAW','DEPOSIT','LOG OFF'],{w:76});
+    if(c===0){
+      if(!G.box.length){ await say('There are no Carloses in storage.'); continue; }
+      if(G.party.length>=6){ await say('Your party is full. Deposit a Carlos first.'); continue; }
+      setText('Withdraw which Carlos?');
+      const i=await menu(G.box.slice(0,9).map(partyLabel),{x:8,y:6,w:224});
+      if(i>=0){ const m=G.box.splice(i,1)[0]; m.hp=stat(m,'hp'); G.party.push(m); await say(`${nm(m)} joined your party!`); }
+    } else if(c===1){
+      if(G.party.length<=1){ await say("You can't deposit your last Carlos!"); continue; }
+      const i=await pickMon('Deposit which Carlos?');
+      if(i>=0){ const m=G.party.splice(i,1)[0]; G.box.push(m); await say(`${nm(m)} was sent to storage.`); }
+    } else break;
+  }
+}
+async function useCola(m){
+  if(m.hp<=0){ await say(`${nm(m)} has fainted. Cola can't fix that.`); return false; }
+  if(m.hp>=stat(m,'hp')){ await say(`${nm(m)} is already at full HP.`); return false; }
+  G.bag.cola--; m.hp=Math.min(stat(m,'hp'),m.hp+COLA_HEAL);
+  await say(`${nm(m)} chugged the CARLOS COLA and recovered HP!`);
+  return true;
+}
+
+// ----------------------------- SAVING ---------------------------------
+function save(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(G)); return true; }catch(e){ return false; } }
+function loadSave(){ try{ const s=localStorage.getItem(SAVE_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
+
+async function titleMenu(){
+  const sv=loadSave();
+  let c=1;
+  if(sv){ c=await menu(['CONTINUE','NEW GAME'],{x:84,y:120,w:72}); if(c<0) return; }
+  await fadeTo(1);
+  if(sv&&c===0){ G=Object.assign(freshGame(),sv); if(!G.flags.freeBalls&&G.map==='world'&&G.y<4) G.y=5; scene='world'; showBanner(); await fadeTo(0); return; }
+  G=freshGame(); scene='world'; showBanner();
+  await fadeTo(0);
+  await say('Welcome to the world of CARLOS!');
+  await say('You are Carlos. Your mom is Carlos. Your rival is, unfortunately, also Carlos.');
+  await say('MOM CARLOS: Carlos! Professor Carlos was looking for you. His lab is just south of here!');
+}
+
+// ------------------------------ BATTLE --------------------------------
+const stageMult=s=>s>=0?(2+s)/2:2/(2-s);
+const label=who=>who==='me'?nm(B.me):(B.wild?'Wild ':'Foe ')+nm(B.foe);
+
+async function battle(o){
+  for(let i=0;i<3;i++){ fx.a=.9; await sleep(70); fx.a=0; await sleep(70); }
+  await fadeTo(1);
+  const foes=o.party; let fi=0, result;
+  B={foe:foes[0],me:G.party.find(m=>m.hp>0),wild:!!o.wild,name:o.name,showFoe:!!o.wild,showMe:false,
+     st:{me:{atk:0,def:0},foe:{atk:0,def:0}},hpS:{},hit:{},ball:null};
+  B.hpS.me=B.me.hp; B.hpS.foe=B.foe.hp;
+  scene='battle'; ui.text=null;
+  await fadeTo(0);
+  if(o.wild) await say(`A wild ${nm(B.foe)} appeared!`);
+  else { await say(`${o.name} wants to battle!`); B.showFoe=true; await say(`${o.name} sent out ${nm(B.foe)}!`); }
+  B.showMe=true; await say(`Go! ${nm(B.me)}!`);
+
+  while(true){
+    // ---- choose an action
+    let act=null;
+    while(!act){
+      setText(`What will ${nm(B.me)} do?`);
+      const c=await menu(['FIGHT','BAG','CARLOSES','RUN'],{cancel:false,w:70});
+      if(c===0){
+        const ms=B.me.moves;
+        const i=await menu(ms.map(n=>n.padEnd(18)+MOVES[n].type),{w:164});
+        if(i>=0) act={t:'move',mv:ms[i]};
+      } else if(c===1){
+        const i=await menu([`CARLOSBALL x${G.bag.ball}`,`CARLOS COLA x${G.bag.cola}`],{w:108});
+        if(i===0){
+          if(!o.wild) await say("You can't catch someone else's Carlos! That's just rude.");
+          else if(!G.bag.ball) await say('You have no CARLOSBALLS! The CARLOSMART in CARLOS CITY sells them.');
+          else act={t:'ball'};
+        } else if(i===1){
+          if(!G.bag.cola) await say('You have no CARLOS COLA.');
+          else if(await useCola(B.me)) act={t:'item'};
+        }
+      } else if(c===2){
+        const i=await pickMon('Switch to which Carlos?');
+        if(i>=0){
+          if(G.party[i]===B.me) await say(`${nm(B.me)} is already out there!`);
+          else if(G.party[i].hp<=0) await say(`${nm(G.party[i])} has no energy left!`);
+          else act={t:'switch',i};
+        }
+      } else {
+        if(!o.wild) await say("There's no running from a Carlos battle!");
+        else act={t:'run'};
+      }
+    }
+    // ---- your non-attack actions happen first
+    if(act.t==='run'){
+      if(Math.random()<.9){ await say('Got away safely!'); result='run'; break; }
+      await say("Couldn't get away!");
+    } else if(act.t==='switch'){
+      await say(`${nm(B.me)}, come back!`);
+      B.me=G.party[act.i]; B.st.me={atk:0,def:0}; B.hpS.me=B.me.hp;
+      await say(`Go! ${nm(B.me)}!`);
+    } else if(act.t==='ball'){
+      if(await throwBall()){ result='caught'; break; }
+    }
+    // ---- attacks, fastest first
+    const foeMove=pick(B.foe.moves);
+    const order=act.t!=='move'?['foe']:(stat(B.me,'spd')>=stat(B.foe,'spd')?['me','foe']:['foe','me']);
+    for(const who of order){
+      if(B.me.hp<=0||B.foe.hp<=0) break;
+      await useMove(who,who==='me'?act.mv:foeMove);
+    }
+    // ---- faints
+    if(B.foe.hp<=0){
+      await say(`${label('foe')} fainted!`); B.showFoe=false;
+      await gainExp(B.me,Math.floor(SPECIES[B.foe.sp].exp*B.foe.lvl/7*(o.wild?1:1.5)));
+      if(++fi<foes.length){
+        B.foe=foes[fi]; B.st.foe={atk:0,def:0}; B.hpS.foe=B.foe.hp; B.showFoe=true;
+        await say(`${o.name} sent out ${nm(B.foe)}!`);
+        continue;
+      }
+      result='win'; break;
+    }
+    if(B.me.hp<=0){
+      await say(`${nm(B.me)} fainted!`);
+      if(!G.party.some(m=>m.hp>0)){ result='lose'; break; }
+      let i=-1;
+      while(i<0||G.party[i].hp<=0) i=await pickMon('Send out which Carlos?');
+      B.me=G.party[i]; B.st.me={atk:0,def:0}; B.hpS.me=B.me.hp;
+      await say(`Go! ${nm(B.me)}!`);
+    }
+  }
+  if(result==='win'&&!o.wild){
+    await say(`You defeated ${o.name}!`);
+    G.money+=o.prize; await say(`You got $${o.prize} for winning!`);
+  }
+  if(result==='lose') await say("You're out of Carloses that can battle!");
+  await fadeTo(1);
+  scene='world'; B=null; ui.text=null;
+  await fadeTo(0);
+  return result;
+}
+
+async function useMove(who,name){
+  const me=who==='me', A=me?B.me:B.foe, D=me?B.foe:B.me, dk=me?'foe':'me';
+  const m=MOVES[name];
+  await say(`${label(who)} used ${name.toUpperCase()}!`);
+  if(Math.random()*100>=(m.acc||100)){ await say('But it missed!'); return; }
+  if(m.kind==='heal'){
+    const max=stat(A,'hp');
+    if(A.hp>=max){ await say('But nothing happened!'); return; }
+    A.hp=Math.min(max,A.hp+Math.ceil(max/2)); await sleep(500);
+    await say(`${label(who)} feels refreshed!`);
+  } else if(m.kind==='atkDown'||m.kind==='defDown'){
+    const k=m.kind==='atkDown'?'atk':'def';
+    if(m.flavor) await say(m.flavor);
+    if(B.st[dk][k]<=-6){ await say('But nothing happened!'); return; }
+    B.st[dk][k]--;
+    await say(`${label(dk)}'s ${k==='atk'?'ATTACK':'DEFENSE'} fell!`);
+  } else {
+    const eff=typeMult(m.type,SPECIES[D.sp].type);
+    const crit=Math.random()<.06?1.5:1;
+    const stab=m.type===SPECIES[A.sp].type?1.5:1;
+    const atk=stat(A,'atk')*stageMult(B.st[who].atk), def=stat(D,'def')*stageMult(B.st[dk].def);
+    let dmg=Math.floor(((2*A.lvl/5+2)*m.power*atk/def)/50+2);
+    dmg=Math.max(1,Math.floor(dmg*eff*crit*stab*(.85+Math.random()*.15)));
+    D.hp=Math.max(0,D.hp-dmg);
+    B.hit[dk]=frame+30;
+    await sleep(650);
+    if(m.flavor) await say(m.flavor);
+    if(crit>1) await say('A critical hit!');
+    if(eff>1) await say("It's super effective!");
+    if(eff<1) await say("It's not very effective...");
+  }
+}
+
+async function gainExp(m,amount){
+  m.exp+=amount;
+  await say(`${nm(m)} gained ${amount} EXP!`);
+  while(m.exp>=(m.lvl+1)**3 && m.lvl<100){
+    const old=stat(m,'hp'); m.lvl++; m.hp+=stat(m,'hp')-old;
+    await say(`${nm(m)} grew to level ${m.lvl}!`);
+    for(const [l,mvn] of SPECIES[m.sp].moves){
+      if(l===m.lvl&&!m.moves.includes(mvn)){
+        if(m.moves.length>=4) m.moves.shift();
+        m.moves.push(mvn);
+        await say(`${nm(m)} learned ${mvn.toUpperCase()}!`);
+      }
+    }
+  }
+  const ev=SPECIES[m.sp].evolve;
+  if(ev&&m.lvl>=ev[0]){
+    const before=nm(m), old=stat(m,'hp');
+    await say(`What? ${before} is having a GLOW-UP!`);
+    if(B){ B.hit.me=frame+70; } await sleep(1200);
+    m.sp=ev[1]; m.hp+=stat(m,'hp')-old;
+    await say(`${before} became ${nm(m)}!`);
+  }
+}
+
+async function throwBall(){
+  const f=B.foe, s=SPECIES[f.sp];
+  G.bag.ball--;
+  await say('You threw a CARLOSBALL!');
+  B.showFoe=false; B.ball={shake:false};
+  const p=Math.min(.97,s.catch*(3-2*f.hp/stat(f,'hp')));
+  const per=Math.cbrt(p);
+  let ok=true;
+  for(let i=0;i<3;i++){
+    await sleep(350); B.ball.shake=true; await sleep(450); B.ball.shake=false;
+    if(Math.random()>per){ ok=false; break; }
+  }
+  if(!ok){
+    B.ball=null; B.showFoe=true;
+    await say(pick(['Argh! It broke free!','So close! The Carlos escaped!','Nope! It popped right out!']));
+    return false;
+  }
+  await sleep(300);
+  await say(`Gotcha! ${s.name} was caught!`);
+  if(G.party.length<6) G.party.push(f);
+  else { G.box.push(f); await say(`Your party is full, so ${s.name} was sent to Professor Carlos's lab.`); }
+  B.ball=null;
+  return true;
+}
+
+// ---------------------------- DRAWING ---------------------------------
+const R=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+
+// Draws a Carlos on a 16x16 grid, each cell k pixels. Used for people AND monsters.
+function drawCarlos(ox,oy,k,look,dir,step,flip){
+  look=look||{}; dir=dir||'down';
+  const skin=look.skin||'#e2ac7c', hair=look.hair||'#6b4226', shirt=look.shirt||'#4a78c8', pants=look.pants||'#35405c';
+  const p=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(ox+(flip?16-x-w:x)*k,oy+y*k,w*k,h*k); };
+  const l1=step===1?1:0, l2=step===2?1:0;
+  p(5,13,2,2-l1,pants); p(9,13,2,2-l2,pants); p(5,15-l1,2,1,'#20202a'); p(9,15-l2,2,1,'#20202a');
+  p(4,8,8,5,shirt); p(3,8,1,4,shirt); p(12,8,1,4,shirt); p(3,12,1,1,skin); p(12,12,1,1,skin);
+  if(look.wide){ p(2,8,1,4,shirt); p(13,8,1,4,shirt); }
+  if(look.sleeveless){ p(3,8,1,4,skin); p(12,8,1,4,skin); p(2,8,1,3,skin); p(13,8,1,3,skin); }
+  if(look.robe){ p(4,8,8,7,shirt); p(7,8,2,7,'#ffffff'); }
+  if(look.bib&&dir!=='up'){ p(6,8,4,3,'#ffffff'); }
+  if(look.coat){ p(4,8,3,5,'#f4f4f4'); p(9,8,3,5,'#f4f4f4'); p(3,8,1,4,'#f4f4f4'); p(12,8,1,4,'#f4f4f4'); }
+  if(look.apron) p(5,9,6,4,'#ffffff');
+  if(look.tie&&dir!=='up') p(7,8,2,4,'#b03030');
+  const shade='#c48a5c';
+  p(4,2,8,4,skin); p(5,6,6,1,skin); p(6,7,4,1,skin); p(7,8,2,1,skin);
+  if(dir==='up'){ p(3,1,10,6,hair); if(look.longHair) p(3,7,10,3,hair); }
+  else {
+    p(4,1,8,2,hair); p(3,2,1,3,hair); p(12,2,1,3,hair); p(4,0,6,1,hair); p(10,1,2,1,'#855634');
+    p(4,5,1,1,shade); p(11,5,1,1,shade); p(5,6,1,1,shade); p(10,6,1,1,shade);
+    if(look.longHair){ p(3,2,1,8,hair); p(12,2,1,8,hair); }
+    if(look.spiky){ p(4,0,1,1,hair); p(6,0,2,1,hair); p(9,0,1,1,hair); p(11,0,1,1,hair); }
+    const ex=dir==='left'?-1:dir==='right'?1:0;
+    if(look.shades) p(5+ex,4,6,2,'#15151a');
+    else if(look.eyes==='sleepy'){ p(5+ex,5,2,1,'#15151a'); p(9+ex,5,2,1,'#15151a'); }
+    else { p(6+ex,5,1,1,'#15151a'); p(9+ex,5,1,1,'#15151a'); }
+    if(look.glasses){ p(5+ex,4,3,1,'#555'); p(8+ex,4,3,1,'#555'); }
+    if(!look.shades&&!look.glasses){ p(5+ex,4,2,1,'#3d2414'); p(9+ex,4,2,1,'#3d2414'); }
+    if((look.mouth||'flat')!=='open') p(8+ex,6,1,1,shade);
+    const mo=look.mouth||'flat';
+    if(mo==='smile'){ p(7+ex,7,2,1,'#8a3b2a'); }
+    else if(mo==='open'){ p(7+ex,6,2,2,'#5a1a1a'); }
+    else if(mo==='frown'){ p(7+ex,7,2,1,'#5a1a1a'); p(6+ex,6,1,1,'#8a3b2a'); }
+    else p(7+ex,7,2,1,'#a8674a');
+  }
+  const hc=look.hatColor||'#d83a3a';
+  if(look.hat==='cap'){ p(4,0,8,3,hc); p(3,1,1,2,hc); p(12,1,1,2,hc); if(dir!=='up') p(dir==='right'?8:3,3,6,1,hc); }
+  else if(look.hat==='headband'){ p(3,3,10,1,hc); }
+  else if(look.hat==='nightcap'){ p(4,0,8,3,hc); p(12,1,2,1,hc); p(13,2,1,2,hc); p(13,4,1,1,'#ffffff'); }
+  else if(look.hat==='headset'){ p(4,0,8,1,'#333'); p(3,1,1,5,'#333'); p(12,1,1,5,'#333'); if(dir!=='up') p(10,7,3,1,'#333'); }
+  if(dir==='down'){
+    switch(look.item){
+      case 'dumbbell': p(13,11,3,1,'#999'); p(13,10,1,3,'#333'); p(15,10,1,3,'#333'); break;
+      case 'pillow':   p(0,9,4,4,'#ffffff'); p(0,12,4,1,'#c9d2e8'); break;
+      case 'chips':    p(13,9,3,4,'#f2c230'); p(13,10,3,1,'#d8402f'); break;
+      case 'watch':    p(12,11,1,1,'#f2c230'); p(13,2,1,2,'#6cc5f0'); break;
+      case 'controller': p(5,10,6,2,'#2c2c34'); p(6,10,1,1,'#e33'); p(9,10,1,1,'#3d3'); break;
+      case 'coffee':   p(13,10,2,3,'#ffffff'); p(13,10,2,1,'#6b4a2b'); p(15,11,1,1,'#ffffff'); break;
+      case 'mic':      p(13,9,1,4,'#888'); p(12,7,3,2,'#222'); break;
+      case 'mug':      p(13,10,2,3,'#d8402f'); p(15,11,1,1,'#d8402f'); break;
+      case 'rod':      p(14,1,1,12,'#8c6239'); p(15,1,1,6,'#e8e8e8'); p(15,7,1,1,'#e2553a'); break;
+      case 'taco':     p(13,10,3,2,'#f2c230'); p(13,9,3,1,'#6aa84f'); p(14,9,1,1,'#d8402f'); break;
+      case 'fork':     p(14,6,1,7,'#b8b8b8'); p(13,6,3,1,'#b8b8b8'); p(13,7,1,1,'#b8b8b8'); p(15,7,1,1,'#b8b8b8'); break;
+    }
+  }
+}
+
+function drawBall(x,y,k){   // the CarlosBall: teal top, cream bottom, gold C badge
+  const p=(a,b,w,h,c)=>R(x+a*k,y+b*k,w*k,h*k,c);
+  p(2,0,4,1,'#15151a'); p(1,1,6,1,'#15151a'); p(0,2,8,4,'#15151a'); p(1,6,6,1,'#15151a'); p(2,7,4,1,'#15151a');
+  p(2,1,4,1,'#2aa198'); p(1,2,6,2,'#2aa198'); p(1,4,6,2,'#f4ecd0'); p(2,6,4,1,'#f4ecd0');
+  p(3,3,2,2,'#f2c230'); p(2,2,1,1,'#7fe0d8');
+}
+
+function drawTile(ch,sx,sy,tx,ty,map){
+  const h=(tx*7+ty*13)%5;
+  const grass=()=>{ R(sx,sy,T,T,'#7ec850'); if(h<2){ R(sx+3+h*4,sy+4,1,2,'#62b03c'); R(sx+10-h*3,sy+11,1,2,'#62b03c'); } };
+  const wall=()=>{ R(sx,sy,T,T,'#efe6cf'); R(sx,sy+13,T,3,'#cfc3a4'); R(sx,sy,T,1,'#b8ab8a'); };
+  const floor=()=>{ R(sx,sy,T,T,'#dcc091'); R(sx,sy+7,T,1,'#c9ab7a'); R(sx,sy+15,T,1,'#c9ab7a'); R(sx+((ty%2)?4:11),sy,1,7,'#c9ab7a'); R(sx+((ty%2)?11:4),sy+8,1,7,'#c9ab7a'); };
+  const roof=(c,d)=>{ R(sx,sy,T,T,c); R(sx,sy+5,T,1,d); R(sx,sy+11,T,1,d); if(!'rbgov'.includes(tileAt(map,tx,ty+1))) R(sx,sy+13,T,3,d); if(!'rbgov'.includes(tileAt(map,tx,ty-1))) R(sx,sy,T,2,'#ffffff55'); };
+  switch(ch){
+    case '.': grass(); break;
+    case ',': R(sx,sy,T,T,'#e6d3a0'); if(h===0) R(sx+5,sy+6,2,1,'#cdb980'); if(h===3) R(sx+10,sy+11,2,1,'#cdb980'); break;
+    case '#': grass(); R(sx+6,sy+11,4,5,'#6b4a2b'); R(sx+1,sy+2,14,10,'#2f6b3a'); R(sx+3,sy,10,13,'#2f6b3a'); R(sx+3,sy+2,10,8,'#3f8f4a'); R(sx+4,sy+3,4,2,'#62b866'); break;
+    case ':': R(sx,sy,T,T,'#5fae45'); for(let i=0;i<4;i++){ R(sx+1+i*4,sy+3+(i+tx)%2*2,2,11,'#3d8a34'); R(sx+3+i*4,sy+8,1,6,'#93d86e'); } break;
+    case '~': { R(sx,sy,T,T,'#4f9be0'); const o=(tx*5+ty*3+Math.floor(frame/24))%12; R(sx+o,sy+4,4,1,'#a8d8f8'); R(sx+(o+7)%12,sy+11,4,1,'#a8d8f8'); break; }
+    case 'f': grass(); R(sx+3,sy+4,2,2,'#f25a5a'); R(sx+4,sy+6,1,2,'#3d8a34'); R(sx+10,sy+9,2,2,'#fff2a8'); R(sx+11,sy+11,1,2,'#3d8a34'); break;
+    case 'F': grass(); R(sx,sy+6,T,2,'#b98b55'); R(sx,sy+10,T,2,'#b98b55'); R(sx+2,sy+3,3,11,'#8c6239'); R(sx+11,sy+3,3,11,'#8c6239'); break;
+    case 'S': grass(); R(sx+7,sy+9,2,6,'#6b4a2b'); R(sx+2,sy+2,12,8,'#8c6239'); R(sx+3,sy+3,10,6,'#d9b98a'); R(sx+5,sy+5,6,1,'#6b4a2b'); R(sx+5,sy+7,4,1,'#6b4a2b'); break;
+    case 'r': roof('#d8553f','#a83a2a'); break;
+    case 'b': roof('#4a78c8','#35589a'); break;
+    case 'g': roof('#9aa3ad','#727b86'); break;
+    case 'o': roof('#e09a3a','#b07020'); break;
+    case 'v': roof('#8a5ac8','#63409a'); break;
+    case 'Q': floor(); R(sx+3,sy+12,2,4,'#333'); R(sx+11,sy+12,2,4,'#333'); R(sx+1,sy+5,14,7,'#22222a'); R(sx+2,sy+3,12,3,'#3a3a44'); R(sx+3,sy+6,10,1,(frame>>4)%2?'#f08a20':'#e2553a'); R(sx+7,sy+1,2,2,'#888'); break;
+    case 'P': R(sx,sy,T,T,'#8f8478'); R(sx+2,sy+1,12,9,'#3a3a44'); R(sx+3,sy+2,10,7,(frame>>5)%2?'#7fe0d8':'#58c2b8'); R(sx+1,sy+11,14,4,'#d8dde6'); R(sx+3,sy+12,8,1,'#8a8f98'); break;
+    case 'W': wall(); break;
+    case 'w': wall(); R(sx+3,sy+3,10,8,'#5a4a3a'); R(sx+4,sy+4,8,6,'#9fd4f0'); R(sx+7,sy+4,1,6,'#5a4a3a'); break;
+    case 'D': case 'd': wall(); R(sx+2,sy+1,12,15,'#5a3a22'); R(sx+3,sy+2,10,14,ch==='D'?'#8c5a30':'#74502e'); R(sx+10,sy+9,2,2,'#f2c230'); break;
+    case '_': floor(); break;
+    case 'X': R(sx,sy,T,T,'#8f8478'); R(sx,sy+12,T,4,'#6f655b'); R(sx,sy,T,2,'#aca196'); break;
+    case 'T': floor(); R(sx,sy+2,T,10,'#8c5a30'); R(sx,sy+2,T,2,'#b07a48'); R(sx+1,sy+12,2,4,'#5a3a22'); R(sx+13,sy+12,2,4,'#5a3a22'); break;
+    case 'B': floor(); R(sx+1,sy,14,16,'#3558a8'); R(sx+2,sy+1,12,5,'#ffffff'); R(sx+2,sy+7,12,8,'#5a86d8'); break;
+    case 'C': floor(); R(sx,sy+1,T,13,'#2a7f78'); R(sx,sy+1,T,4,'#58c2b8'); break;
+    case 'K': R(sx,sy,T,T,'#6b4a2b'); R(sx+1,sy+2,14,5,'#3a2a1a'); R(sx+1,sy+9,14,5,'#3a2a1a');
+              ['#d8553f','#4a78c8','#e0a52e','#6aa84f'].forEach((c,i)=>{ R(sx+2+i*3,sy+3,2,4,c); R(sx+3+i*3,sy+10,2,4,c); }); break;
+    case 'M': R(sx,sy,T,T,'#8f8478'); R(sx,sy,T,12,'#c0483a'); R(sx+2,sy+2,12,8,'#e06a5a'); break;
+    case 'H': R(sx,sy,T,T,'#8f8478'); R(sx+1,sy+2,14,13,'#d8dde6'); R(sx+3,sy+4,10,5,'#58c2b8'); R(sx+4,sy+11,2,2,'#e2553a'); R(sx+8,sy+11,2,2,'#6aa84f'); break;
+    case 'p': floor(); R(sx+5,sy+10,6,5,'#b5623a'); R(sx+4,sy+2,8,8,'#3f8f4a'); R(sx+6,sy,4,4,'#62b866'); break;
+    default: R(sx,sy,T,T,'#000');
+  }
+}
+
+function drawWorld(){
+  const m=MAPS[G.map], mw=m.rows[0].length*T, mh=m.rows.length*T;
+  const px=(G.x+(mv?mv.dx*mv.t:0))*T, py=(G.y+(mv?mv.dy*mv.t:0))*T;
+  let cx=Math.round(px-7*T), cy=Math.round(py-5*T);
+  cx=mw<=W?-(W-mw)/2:Math.max(0,Math.min(mw-W,cx));
+  cy=mh<=H?-(H-mh)/2:Math.max(0,Math.min(mh-H,cy));
+  cx=Math.round(cx); cy=Math.round(cy);
+  R(0,0,W,H,'#101014');
+  const x0=Math.max(0,Math.floor(cx/T)), y0=Math.max(0,Math.floor(cy/T));
+  for(let ty=y0;ty<Math.min(m.rows.length,y0+VH+1);ty++)
+    for(let tx=x0;tx<Math.min(m.rows[0].length,x0+VW+1);tx++)
+      drawTile(m.rows[ty][tx],tx*T-cx,ty*T-cy,tx,ty,G.map);
+  if(MAPS[G.map].outside){
+    ctx.font='bold 7px ui-monospace,Menlo,Consolas,monospace'; ctx.textAlign='center';
+    for(const l of LABELS){ if(l.map!==G.map) continue; ctx.fillStyle='#ffffff'; ctx.fillText(l.text,(l.x+l.w/2)*T-cx,l.y*T-cy+10); }
+    ctx.textAlign='left';
+  }
+  const list=ENT.filter(e=>e.map===G.map&&visible(e)).map(e=>({y:e.y*T,e}));
+  list.push({y:py,player:true});
+  list.sort((a,b)=>a.y-b.y);
+  for(const it of list){
+    if(it.player){
+      const step=mv?(mv.t<.5?1:2):0;
+      drawCarlos(Math.round(px)-cx,Math.round(py)-cy-3,1,LOOKS.player,G.dir,step);
+    } else {
+      const e=it.e, sx=e.x*T-cx, sy=e.y*T-cy;
+      if(e.kind==='ball') drawBall(sx+4,sy+2,1);
+      else {
+        drawCarlos(sx,sy-3,1,e.look,e.dir,0);
+        if(e.alert>frame){ R(sx+5,sy-16,6,11,'#ffffff'); R(sx+7,sy-14,2,5,'#d8402f'); R(sx+7,sy-8,2,2,'#d8402f'); }
+      }
+    }
+  }
+  if(banner.t>0&&!ui.text){
+    ctx.font=FONT; const w=ctx.measureText(banner.text).width+12;
+    R(4,4,w,16,'#20202a'); R(5,5,w-2,14,'#f8f4e4'); ctx.fillStyle='#20202a'; ctx.fillText(banner.text,10,15);
+  }
+}
+
+function hpBar(x,y,w,cur,max){
+  const f=Math.max(0,Math.min(1,cur/max));
+  R(x,y,w,5,'#20202a'); R(x+1,y+1,w-2,3,'#585868');
+  R(x+1,y+1,Math.round((w-2)*f),3,f>.5?'#4ec24a':f>.2?'#e8c020':'#e04a3a');
+}
+function infoBox(x,y,m,shown,mine){
+  R(x,y,108,mine?34:26,'#20202a'); R(x+1,y+1,106,mine?32:24,'#f8f4e4');
+  ctx.font=FONT; ctx.fillStyle='#20202a';
+  ctx.fillText(nm(m),x+5,y+11);
+  ctx.textAlign='right'; ctx.fillText('L'+m.lvl,x+103,y+11); ctx.textAlign='left';
+  R(x+5,y+15,22,6,TYPES[SPECIES[m.sp].type].color);
+  hpBar(x+30,y+15,73,shown,stat(m,'hp'));
+  if(mine){
+    ctx.fillText(Math.ceil(shown)+'/'+stat(m,'hp'),x+5,y+30);
+    const a=m.lvl**3, b=(m.lvl+1)**3;
+    R(x+52,y+26,51,3,'#b8b4a4'); R(x+52,y+26,Math.round(51*Math.min(1,(m.exp-a)/(b-a))),3,'#4a8fd8');
+  }
+}
+function drawBattle(){
+  R(0,0,W,H,'#eef0e0'); R(0,0,W,40,'#d6ecf5'); R(0,40,W,2,'#c2dbe4');
+  ctx.fillStyle='#b9d49a';
+  ctx.beginPath(); ctx.ellipse(182,66,42,10,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(56,124,54,11,0,0,Math.PI*2); ctx.fill();
+  const blink=who=>B.hit[who]>frame&&(frame>>2)%2;
+  if(B.showFoe&&!blink('foe')) drawCarlos(158,18,3,SPECIES[B.foe.sp].look,'down',0);
+  if(B.ball) drawBall(170+(B.ball.shake?Math.round(Math.sin(frame*.6)*3):0),44,3);
+  if(B.showMe&&!blink('me')) drawCarlos(24,60,4,SPECIES[B.me.sp].look,'down',0,true);
+  if(B.showFoe||B.ball) infoBox(8,10,B.foe,B.hpS.foe,false);
+  if(B.showMe) infoBox(124,74,B.me,B.hpS.me,true);
+}
+function drawTitle(){
+  R(0,0,W,H,'#2a2440');
+  for(let i=0;i<24;i++) R((i*37+frame/4)%W,(i*53)%110,1,1,'#ffffff');
+  ctx.textAlign='center';
+  ctx.font='bold 34px ui-monospace,Menlo,Consolas,monospace';
+  ctx.fillStyle='#15151a'; ctx.fillText('CARLOS',W/2+2,50);
+  ctx.fillStyle='#f2c230'; ctx.fillText('CARLOS',W/2,48);
+  ctx.font='bold 10px ui-monospace,Menlo,Consolas,monospace';
+  ctx.fillStyle='#ffffff'; ctx.fillText('C A R L O S   V E R S I O N',W/2,64);
+  ctx.textAlign='left';
+  drawCarlos(40,76,3,SPECIES.gym.look,'down',0);
+  drawCarlos(96,72+Math.round(Math.sin(frame/20)*2),3,LOOKS.player,'down',0);
+  drawCarlos(152,76,3,SPECIES.nap.look,'down',0,true);
+  if(!ui.menus.length&&(frame>>5)%2){
+    ctx.font=FONT; ctx.textAlign='center'; ctx.fillStyle='#ffffff';
+    ctx.fillText('PRESS  A  (Z / SPACE)  TO START',W/2,150); ctx.textAlign='left';
+  }
+  ctx.font='7px ui-monospace,Menlo,Consolas,monospace'; ctx.fillStyle='#8a84a8'; ctx.textAlign='center';
+  ctx.fillText('Gotta Carlos them all.',W/2,168); ctx.textAlign='left';
+}
+function drawBox(x,y,w,h){ R(x,y,w,h,'#20202a'); R(x+1,y+1,w-2,h-2,'#f8f4e4'); R(x+3,y+3,w-6,h-6,'#20202a'); R(x+4,y+4,w-8,h-8,'#f8f4e4'); }
+function drawUI(){
+  const t=ui.text;
+  if(t){
+    drawBox(0,128,W,48);
+    ctx.font=FONT; ctx.fillStyle='#20202a';
+    let left=Math.floor(t.n);
+    const lines=t.pages[t.page];
+    lines.forEach((ln,i)=>{ const s=ln.slice(0,Math.max(0,left)); left-=ln.length; ctx.fillText(s,10,143+i*12); });
+    if(t.wait&&t.n>=lines.join('').length&&(frame>>4)%2){
+      ctx.beginPath(); ctx.moveTo(224,166); ctx.lineTo(232,166); ctx.lineTo(228,171); ctx.fill();
+    }
+  }
+  for(const mn of ui.menus){
+    const h=mn.opts.length*12+12;
+    const x=mn.x!==undefined?mn.x:W-mn.w-2, y=mn.y!==undefined?mn.y:(scene==='battle'?174:t?126:174)-h;
+    drawBox(x,y,mn.w,h);
+    ctx.font=FONT; ctx.fillStyle='#20202a';
+    mn.opts.forEach((o,i)=>{
+      ctx.fillText(o,x+15,y+16+i*12);
+      if(i===mn.sel){ ctx.beginPath(); ctx.moveTo(x+7,y+9+i*12); ctx.lineTo(x+12,y+12.5+i*12); ctx.lineTo(x+7,y+16+i*12); ctx.fill(); }
+    });
+  }
+}
+function render(){
+  ctx.setTransform(SCALE,0,0,SCALE,0,0);
+  ctx.imageSmoothingEnabled=false; ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+  if(scene==='title') drawTitle();
+  else if(scene==='battle'&&B) drawBattle();
+  else drawWorld();
+  drawUI();
+  if(fx.a>0){ ctx.globalAlpha=Math.min(1,fx.a); R(0,0,W,H,'#000'); ctx.globalAlpha=1; }
+}
+
+// ------------------------------ LOOP ----------------------------------
+function update(){
+  frame++;
+  if(ui.text&&ui.text.n<999) ui.text.n+=1.3;
+  if(banner.t>0) banner.t--;
+  if(B){
+    for(const k of ['me','foe']){
+      const target=B[k].hp, d=target-B.hpS[k];
+      B.hpS[k]=Math.abs(d)<.35?target:B.hpS[k]+Math.sign(d)*.35;
+    }
+  }
+  if(scene==='world'){
+    if(mv){ mv.t+=held.B?1/5:1/9; if(mv.t>=1){ G.x+=mv.dx; G.y+=mv.dy; mv=null; arrive(); } }
+    if(!mv&&!busy&&!ui.menus.length&&!ui.text){
+      for(const d of ['up','down','left','right']) if(held[d]){ tryMove(d); break; }
+    }
+  }
+}
+let last=0, acc=0;
+function loop(ts){
+  acc+=Math.min(100,ts-last); last=ts;
+  while(acc>=16.6){ update(); acc-=16.6; }
+  render();
+  requestAnimationFrame(loop);
+}
+window.CARLOS={ get G(){return G;}, get scene(){return scene;}, get busy(){return busy;}, ui, onPress, held, SPECIES, MOVES, MAPS };
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
