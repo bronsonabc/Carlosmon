@@ -20,11 +20,13 @@
   .ab{display:flex;gap:12px;align-items:center}
   .round{width:64px;height:64px;border-radius:50%}
   .small{width:64px;height:34px;font-size:11px}
+  .musbtn{background:#2c2c38;border:2px solid #4a4a5c;border-radius:8px;color:#e8e8f0;font:bold 12px ui-monospace,monospace;padding:6px 12px;cursor:pointer}
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="screen" width="720" height="528"></canvas>
+  <button id="mus" class="musbtn">&#9834; Sound: MED</button>
   <div id="pad">
     <div class="dpad">
       <span></span><div class="btn" data-btn="up">&#9650;</div><span></span>
@@ -37,7 +39,7 @@
       <div class="btn round" data-btn="A">A</div>
     </div>
   </div>
-  <p class="help">Move: Arrow keys / WASD &nbsp;|&nbsp; A (talk / confirm): Z, Space or Enter &nbsp;|&nbsp; B (back, hold to run): X or Esc &nbsp;|&nbsp; Menu: M</p>
+  <p class="help">Move: Arrow keys / WASD &nbsp;|&nbsp; A (talk / confirm): Z, Space or Enter &nbsp;|&nbsp; B (back, hold to run): X or Esc &nbsp;|&nbsp; Menu: M &nbsp;|&nbsp; Sound volume: N</p>
 </div>
 <script>
 'use strict';
@@ -48,12 +50,16 @@
    ===================================================================== */
 
 // ----------------------------- DATA ----------------------------------
-// Type triangle: HYPE beats SNACK, SNACK beats CHILL, CHILL beats HYPE.
+// Eight types. Each lists the types its attacks are super effective against.
 const TYPES = {
-  HYPE:    { color:'#e2553a', beats:'SNACK' },
-  SNACK:   { color:'#d99a1e', beats:'CHILL' },
-  CHILL:   { color:'#3f86d6', beats:'HYPE'  },
-  REGULAR: { color:'#8d8d7c', beats:null    },
+  HYPE:    { color:'#e2553a', beats:['SNACK','NERD'] },
+  SNACK:   { color:'#d99a1e', beats:['CHILL','FANCY'] },
+  CHILL:   { color:'#3f86d6', beats:['HYPE','SPOOKY'] },
+  REGULAR: { color:'#8d8d7c', beats:['WEIRD'] },
+  WEIRD:   { color:'#8a5ac8', beats:['CHILL','FANCY'] },
+  NERD:    { color:'#3fa88a', beats:['WEIRD','SPOOKY'] },
+  FANCY:   { color:'#d06aa8', beats:['REGULAR','NERD'] },
+  SPOOKY:  { color:'#5a4a7a', beats:['HYPE','SNACK'] },
 };
 
 // kind: undefined = damage, or 'atkDown' | 'defDown' | 'heal'
@@ -88,6 +94,30 @@ const MOVES = {
   'Sleepwalk Slam':   { type:'CHILL', power:70, acc:90 },
   'Bass Drop':        { type:'HYPE', power:60, acc:90 },
   'Protein Punch':    { type:'HYPE', power:70, acc:90 },
+  'Uphill Sprint':    { type:'HYPE', power:65, acc:95 },
+  'Bell Ring':        { type:'HYPE', kind:'defDown', acc:100, flavor:'"On your left!"' },
+  'Headlamp Flash':   { type:'HYPE', power:65, acc:90 },
+  'Going Live':       { type:'HYPE', power:70, acc:90, flavor:'"Smash that like button."' },
+  'Weekend Mode':     { type:'HYPE', power:70, acc:90 },
+  'Potato Salad':     { type:'SNACK', power:65, acc:90, flavor:'It had been in the sun a while.' },
+  'Shush':            { type:'CHILL', kind:'atkDown', acc:100, flavor:'"You will scare the birds."' },
+  'Rare Sighting':    { type:'CHILL', power:65, acc:95 },
+  'Deep Breath':      { type:'CHILL', kind:'heal', acc:100 },
+  'Namaste Slam':     { type:'CHILL', power:70, acc:90 },
+  'Cucumber Toss':    { type:'CHILL', power:55, acc:100 },
+  'Hot Stone':        { type:'CHILL', power:75, acc:90 },
+  'Duck Face':        { type:'REGULAR', power:50, acc:100 },
+  'Photo Bomb':       { type:'REGULAR', power:65, acc:95 },
+  'Wrong Turn':       { type:'REGULAR', power:60, acc:95 },
+  'Grunt':            { type:'WEIRD', power:40, acc:100 },
+  'Club Bonk':        { type:'WEIRD', power:60, acc:95 },
+  'Discover Fire':    { type:'WEIRD', power:75, acc:85 },
+  'Do Your Research': { type:'WEIRD', power:45, acc:100 },
+  'Wake Up Sheeple':  { type:'WEIRD', kind:'defDown', acc:100, flavor:'"That is what they WANT you to think."' },
+  'Tinfoil Zap':      { type:'WEIRD', power:60, acc:95 },
+  'Dark Poetry':      { type:'WEIRD', power:45, acc:100, flavor:'It did not rhyme. On purpose.' },
+  'Eye Roll':         { type:'WEIRD', kind:'atkDown', acc:100, flavor:'"Whatever."' },
+  'Midnight Mood':    { type:'WEIRD', power:60, acc:95 },
 };
 
 // look: how the Carlos is drawn (see drawCarlos). moves: [level learned, move]
@@ -112,11 +142,11 @@ const SPECIES = {
             desc:'Has not eaten since breakfast. Approach with fries.',
             look:{shirt:'#b5462f',item:'fork',mouth:'frown'},
             moves:[[1,'Awkward Wave'],[3,'Chip Toss'],[9,'Hot Sauce']] },
-  monday: { name:'MONDAY CARLOS', type:'CHILL', base:{hp:44,atk:42,def:46,spd:34}, exp:55, catch:.38,
+  monday: { name:'MONDAY CARLOS', type:'CHILL', evolve:[16,'friday'], base:{hp:44,atk:42,def:46,spd:34}, exp:55, catch:.38,
             desc:'Runs entirely on coffee and quiet resentment.',
             look:{shirt:'#5d6b7a',item:'coffee',eyes:'sleepy',mouth:'flat',tie:true},
             moves:[[1,'Long Sigh'],[5,'Dad Joke'],[9,'Five More Minutes']] },
-  gamer:  { name:'GAMER CARLOS', type:'HYPE', base:{hp:38,atk:52,def:38,spd:54}, exp:58, catch:.34,
+  gamer:  { name:'GAMER CARLOS', type:'HYPE', evolve:[16,'streamer'], base:{hp:38,atk:52,def:38,spd:54}, exp:58, catch:.34,
             desc:'"One more game." It is 4 a.m.',
             look:{shirt:'#7a3fc0',hat:'headset',item:'controller',mouth:'smile'},
             moves:[[1,'Finger Guns'],[4,'Button Mash'],[9,'Rage Quit']] },
@@ -145,7 +175,61 @@ const SPECIES = {
             desc:'Rare. Nobody else is allowed to touch the grill.',
             look:{shirt:'#2c2c34',apron:true,hat:'cap',hatColor:'#f4f4f4',item:'fork',mouth:'smile'},
             moves:[[1,'Finger Guns'],[5,'Chip Toss'],[9,'Low And Slow'],[11,'Flame Broil']] },
+  // ---- Route 3
+  cyclist:{ name:'CYCLIST CARLOS', type:'HYPE', base:{hp:46,atk:56,def:44,spd:70}, exp:80, catch:.3,
+            desc:'Rides in the middle of the lane. Has opinions about your tire pressure.',
+            look:{shirt:'#18a0d8',hat:'helmet',hatColor:'#e2553a',shades:true,pants:'#15151a',mouth:'smile'},
+            moves:[[1,'Flex'],[6,'Bell Ring'],[10,'Leg Day'],[14,'Uphill Sprint']] },
+  picnic: { name:'PICNIC CARLOS', type:'SNACK', base:{hp:54,atk:54,def:50,spd:42}, exp:80, catch:.3,
+            desc:'Brought enough food for twelve. Came alone.',
+            look:{shirt:'#d85a5a',item:'basket',mouth:'smile'},
+            moves:[[1,'Chip Toss'],[9,'Crumb Storm'],[13,'Extra Guac'],[15,'Potato Salad']] },
+  birder: { name:'BIRDER CARLOS', type:'CHILL', base:{hp:50,atk:50,def:56,spd:44}, exp:80, catch:.3,
+            desc:'Has seen 214 species. Will list them.',
+            look:{shirt:'#a89a6a',hat:'cap',hatColor:'#c8b888',item:'binoculars',mouth:'flat'},
+            moves:[[1,'Long Sigh'],[8,'Shush'],[11,'Five More Minutes'],[15,'Rare Sighting']] },
+  selfie: { name:'SELFIE CARLOS', type:'REGULAR', base:{hp:48,atk:54,def:46,spd:56}, exp:78, catch:.32,
+            desc:'Took 40 photos of this exact moment. Will post one.',
+            look:{shirt:'#f08ab0',item:'phone',mouth:'smile'},
+            moves:[[1,'Finger Guns'],[8,'Bro Hug'],[10,'Duck Face'],[14,'Photo Bomb']] },
+  yoga:   { name:'YOGA CARLOS', type:'CHILL', base:{hp:56,atk:52,def:58,spd:50}, exp:90, catch:.24,
+            desc:'Extremely calm. Extremely smug about it.',
+            look:{shirt:'#b890d8',hat:'headband',hatColor:'#f4f4f4',eyes:'sleepy',mouth:'smile'},
+            moves:[[1,'Yawn'],[1,'Deep Breath'],[12,'Five More Minutes'],[16,'Namaste Slam']] },
+  // ---- Carlos Caverns
+  caveman:{ name:'CAVEMAN CARLOS', type:'WEIRD', base:{hp:58,atk:62,def:52,spd:38}, exp:92, catch:.28,
+            desc:'Has lived in the cave since before rent was invented.',
+            look:{shirt:'#a8703a',pants:'#a8703a',sleeveless:true,longHair:true,spiky:true,item:'club',mouth:'open'},
+            moves:[[1,'Grunt'],[1,'Bro Hug'],[12,'Club Bonk'],[16,'Discover Fire']] },
+  tinfoil:{ name:'TINFOIL CARLOS', type:'WEIRD', base:{hp:46,atk:58,def:46,spd:60}, exp:90, catch:.28,
+            desc:'Says the cave is a cover-up. For what, he will not say.',
+            look:{shirt:'#5a6a4a',hat:'tinfoil',mouth:'open'},
+            moves:[[1,'Do Your Research'],[1,'Wake Up Sheeple'],[13,'Tinfoil Zap']] },
+  goth:   { name:'GOTH CARLOS', type:'WEIRD', base:{hp:50,atk:56,def:54,spd:48}, exp:90, catch:.28,
+            desc:'Lives in the dark by choice. It is not a phase.',
+            look:{shirt:'#15151a',pants:'#15151a',skin:'#f0dcc8',hair:'#15151a',longHair:true,eyes:'sleepy',mouth:'flat'},
+            moves:[[1,'Dark Poetry'],[1,'Eye Roll'],[13,'Midnight Mood']] },
+  lost:   { name:'LOST CARLOS', type:'REGULAR', base:{hp:52,atk:50,def:50,spd:46}, exp:84, catch:.32,
+            desc:'Went in to use the bathroom three days ago.',
+            look:{shirt:'#c8a040',hat:'cap',hatColor:'#3f8f6a',item:'map',mouth:'frown'},
+            moves:[[1,'Awkward Wave'],[1,'Traffic Excuse'],[11,'Be There In 5'],[14,'Wrong Turn']] },
+  caver:  { name:'CAVER CARLOS', type:'HYPE', base:{hp:52,atk:60,def:54,spd:56}, exp:100, catch:.2,
+            desc:'Rare. Calls it "spelunking" and corrects you if you do not.',
+            look:{shirt:'#d87a20',hat:'headlamp',hatColor:'#f2c230',mouth:'smile'},
+            moves:[[1,'Flex'],[10,'Leg Day'],[14,'Headlamp Flash']] },
+  spa:    { name:'SPA DAY CARLOS', type:'CHILL', base:{hp:66,atk:60,def:64,spd:48}, exp:120, catch:.15,
+            desc:'Has not checked his phone in six hours. Radiant.',
+            look:{shirt:'#f4f4f4',robe:true,hat:'towel',eyes:'cucumber',mouth:'smile'},
+            moves:[[1,'Yawn'],[1,'Deep Breath'],[12,'Cucumber Toss'],[17,'Hot Stone']] },
   // ---- Glow-ups (evolutions)
+  streamer:{ name:'STREAMER CARLOS', type:'HYPE', base:{hp:54,atk:70,def:52,spd:72}, exp:130, catch:.14,
+            desc:'Three viewers. One of them is his mom, Carlos.',
+            look:{shirt:'#7a3fc0',hat:'headset',glasses:true,item:'mic',mouth:'open'},
+            moves:[[1,'Finger Guns'],[4,'Button Mash'],[9,'Rage Quit'],[16,'Going Live']] },
+  friday: { name:'FRIDAY CARLOS', type:'HYPE', base:{hp:60,atk:66,def:56,spd:66}, exp:130, catch:.14,
+            desc:'Left work at 2. Unrecognizable from Monday Carlos.',
+            look:{shirt:'#e05a8a',shades:true,item:'taco',mouth:'smile'},
+            moves:[[1,'Long Sigh'],[5,'Dad Joke'],[9,'Five More Minutes'],[16,'Weekend Mode']] },
   swole:  { name:'SWOLE CARLOS', type:'HYPE', base:{hp:58,atk:72,def:58,spd:74}, exp:140, catch:.12,
             desc:'His sleeves gave up. Still talks about leg day.',
             look:{shirt:'#d8402f',sleeveless:true,hat:'headband',hatColor:'#f2c230',item:'dumbbell',mouth:'smile',wide:true},
@@ -168,7 +252,11 @@ const SPECIES = {
 const ROUTE1 = [['late',35,2,4],['hangry',25,2,4],['monday',20,3,4],['gamer',15,3,5],['karaoke',5,4,5]];
 const ROUTE2 = [['dad',28,5,7],['fishing',24,5,7],['taco',22,5,8],['dj',16,6,8],['monday',5,6,7],['bbq',5,7,8]];
 
-const PRICES = { ball:100, cola:80 };
+const ROUTE3 = [['cyclist',24,9,12],['picnic',24,9,12],['birder',20,9,12],['selfie',22,9,12],['yoga',6,10,12],['bbq',4,10,12]];
+const CAVE   = [['caveman',30,11,14],['tinfoil',24,11,14],['goth',22,11,14],['lost',18,11,13],['caver',6,12,14]];
+const WILD   = { world:ROUTE1, north:ROUTE2, east:ROUTE3, cave:CAVE };
+const PRICES = { ball:100, cola:80, big:200 };
+const BIG_HEAL = 60;
 const COLA_HEAL = 20;
 
 // How the people in the world look
@@ -191,11 +279,16 @@ const LOOKS = {
   cook:    { shirt:'#f4f4f4', hat:'cap', hatColor:'#f4f4f4' },
   leader:  { shirt:'#2c2c34', apron:true, hat:'cap', hatColor:'#f4f4f4', mouth:'smile' },
   guide:   { shirt:'#3a5fd8', glasses:true, mouth:'smile' },
+  ranger:  { shirt:'#4a7a3a', hat:'cap', hatColor:'#8c6239' },
+  explorer:{ shirt:'#d87a20', hat:'headlamp', hatColor:'#f2c230' },
+  towel:   { shirt:'#f4f4f4', hat:'towel', mouth:'smile' },
+  sauna:   { shirt:'#e8a070', sleeveless:true, hat:'headband', hatColor:'#f4f4f4' },
+  leader2: { shirt:'#58c2b8', sleeveless:true, hat:'towel', shades:true, mouth:'smile' },
 };
 
 // --------------------------- ENGINE SETUP -----------------------------
 const T=16, VW=15, VH=11, W=VW*T, H=VH*T, SCALE=3;
-const cv=document.getElementById('screen'), ctx=cv.getContext('2d');
+const cv=document.getElementById('screen'); let ctx=cv.getContext('2d');
 const DIRS={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
 const OPP={up:'down',down:'up',left:'right',right:'left'};
 const SAVE_KEY='carlos-version-save-v1';
@@ -215,8 +308,8 @@ const banner={text:'',t:0};
 const held={};
 
 function freshGame(){
-  return { map:'house', x:7, y:2, dir:'down', party:[], box:[], bag:{ball:0,cola:1}, money:500,
-           flags:{}, beaten:{}, badges:[], ret:null, heal:{map:'house',x:4,y:4} };
+  return { map:'house', x:7, y:2, dir:'down', party:[], box:[], bag:{ball:0,cola:1,big:0}, money:500,
+           flags:{}, beaten:{}, badges:[], seen:{}, ret:null, layoutV:2, heal:{map:'house',x:4,y:4} };
 }
 
 // ------------------------------ MAPS ----------------------------------
@@ -287,7 +380,7 @@ const MAPS={};
   [[9,29],[10,30],[12,28],[20,47],[19,48],[9,48],[21,33]].forEach(([x,y])=>put(x,y,'f'));
   put(16,48,'S');
   // ---- SAN CARLOS (y 2..25)
-  rect(14,7,2,19,','); rect(4,17,22,2,','); rect(10,7,10,2,',');
+  rect(14,7,2,19,','); rect(4,17,22,2,','); rect(10,7,10,2,','); rect(26,17,4,1,',');
   bld(10,4,10,'v',14);         // the Gym
   bld(4,14,6,'r',6);           // CarlosCenter
   bld(20,14,6,'b',22);         // CarlosMart
@@ -298,6 +391,63 @@ const MAPS={};
   [[3,3],[4,4],[25,3],[24,4],[3,12],[26,12],[11,21],[12,22],[17,21],[18,12],[9,11],[25,25],[3,25]].forEach(([x,y])=>put(x,y,'f'));
   MAPS.north={rows:m.map(r=>r.join('')),outside:true};
 })();
+(function buildEast(){
+  const OW=56, OH=24, m=[];
+  for(let y=0;y<OH;y++) m.push(Array(OW).fill('#'));
+  const rect=(x,y,w,h,c)=>{for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)m[j][i]=c;};
+  const put=(x,y,c)=>{m[y][x]=c;};
+  const bld=(x,y,w,roof,doorX,doorCh)=>{
+    rect(x,y,w,2,roof);
+    for(let i=0;i<w;i++) put(x+i,y+2,(x+i===doorX)?(doorCh||'D'):(i%2?'w':'W'));
+  };
+  rect(2,2,52,20,'.');
+  // ---- ROUTE 3 (x 2..27): the path dodges the grass but not the trainers
+  rect(5,5,5,4,':'); rect(8,14,7,5,':'); rect(17,4,6,5,':'); rect(18,14,6,4,':');
+  rect(11,7,2,9,'#'); rect(15,2,2,7,'#'); rect(15,13,2,9,'#'); rect(24,2,2,8,'#'); rect(24,13,2,9,'#');
+  rect(0,11,11,1,','); rect(10,3,1,9,','); rect(10,3,5,1,','); rect(13,3,2,9,','); rect(13,11,15,1,',');
+  put(27,9,'S'); put(3,10,'S');
+  [[3,3],[4,4],[6,20],[7,19],[20,11],[22,12],[26,4],[27,5],[3,15],[19,20],[21,2]].forEach(([x,y])=>put(x,y,'f'));
+  // ---- the mountain, with a cave mouth on each side
+  rect(28,0,6,OH,'R'); put(28,11,'E'); put(33,11,'E');
+  // ---- CARLOSBAD (x 34..53)
+  rect(34,11,18,2,','); rect(43,4,2,7,','); rect(36,13,2,6,','); rect(50,13,2,6,','); rect(36,17,16,2,',');
+  rect(38,9,1,2,','); rect(48,9,1,2,',');
+  bld(36,6,6,'r',38);          // CarlosCenter
+  bld(46,6,6,'b',48);          // CarlosMart
+  bld(39,14,10,'t',43);        // the Gym
+  rect(36,20,5,2,'~'); rect(47,20,5,2,'~'); rect(46,3,6,2,'~');
+  put(41,10,'S'); put(38,16,'S');
+  rect(52,11,2,2,'F');
+  [[35,3],[36,4],[40,4],[41,3],[53,5],[53,15],[35,15],[42,20],[45,21],[35,9],[45,10]].forEach(([x,y])=>put(x,y,'f'));
+  MAPS.east={rows:m.map(r=>r.join('')),outside:true};
+})();
+(function buildCave(){
+  const OW=34, OH=20, m=[];
+  for(let y=0;y<OH;y++) m.push(Array(OW).fill('R'));
+  const rect=(x,y,w,h,c)=>{for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)m[j][i]=c;};
+  const put=(x,y,c)=>{m[y][x]=c;};
+  rect(1,9,6,3,'c'); put(0,10,'E');           // west entrance room
+  rect(6,10,6,1,'c'); rect(11,3,2,8,'c');     // east, then north
+  rect(11,2,10,3,'c');                        // top room
+  rect(19,4,2,9,'c');                         // south corridor
+  rect(15,12,8,4,'c');                        // middle room
+  rect(6,14,10,2,'c'); rect(3,13,4,5,'c');    // dead end with treasure
+  rect(22,13,7,1,'c'); rect(27,8,2,6,'c');    // east, then north
+  rect(28,8,5,2,'c'); put(33,9,'E');          // east exit
+  [[2,9],[16,2],[20,2],[15,15],[22,12],[3,17],[6,13],[31,8]].forEach(([x,y])=>put(x,y,'s'));
+  MAPS.cave={rows:m.map(r=>r.join(''))};
+})();
+MAPS.gym2={rows:[
+  'XXXXXXXXXXXX',
+  'X__________X',
+  'X_~~~~~~~~_X',
+  'X_~~~~~~~~_X',
+  'X__________X',
+  'X~~~~~~~~__X',
+  'X__________X',
+  'X__~~~~~~~~X',
+  'Xp_________X',
+  'XXXXXMMXXXXX']};
 MAPS.gym={rows:[
   'XXXXXXXXXXXX',
   'XQ________QX',
@@ -352,6 +502,15 @@ const WARPS={   // step on a door -> go inside
   'north:14,6': {map:'gym',   x:5,y:7,dir:'up'},
   'north:6,16': {map:'center',x:3,y:5,dir:'up'},
   'north:22,16':{map:'mart',  x:3,y:5,dir:'up'},
+  'north:29,17':{map:'east',  x:1,y:11,dir:'right'},
+  'east:0,11':  {map:'north', x:28,y:17,dir:'left'},
+  'east:28,11': {map:'cave',  x:1,y:10,dir:'right'},
+  'cave:0,10':  {map:'east',  x:27,y:11,dir:'left'},
+  'cave:33,9':  {map:'east',  x:34,y:11,dir:'right'},
+  'east:33,11': {map:'cave',  x:32,y:9,dir:'left'},
+  'east:38,8':  {map:'center',x:3,y:5,dir:'up'},
+  'east:48,8':  {map:'mart',  x:3,y:5,dir:'up'},
+  'east:43,16': {map:'gym2',  x:5,y:8,dir:'up'},
 };
 const EXITS={   // step on a doormat -> go outside
   house:{map:'world',x:7,y:50,dir:'down'},
@@ -359,6 +518,7 @@ const EXITS={   // step on a doormat -> go outside
   mart:{map:'world',x:7,y:9,dir:'down'},
   center:{map:'world',x:20,y:9,dir:'down'},
   gym:{map:'north',x:14,y:7,dir:'down'},
+  gym2:{map:'east',x:43,y:17,dir:'down'},
 };
 const SIGNS={
   '10,49':"CARLOS's HOUSE. (That's you. You're Carlos.)",
@@ -370,16 +530,23 @@ const SIGNS={
   'north:16,48':'ROUTE 2. North: SAN CARLOS. Trainers on the east path, tall grass on the west.',
   'north:12,9':'SAN CARLOS GYM. Leader: GRILLMASTER CARLOS. "Low and slow."',
   'north:16,24':'SAN CARLOS. Smells faintly of barbecue at all times.',
+  'east:3,10':'ROUTE 3. East: CARLOS CAVERNS and CARLOSBAD.',
+  'east:27,9':'CARLOS CAVERNS. Mind your head. And the Carloses.',
+  'east:41,10':'CARLOSBAD. Come for the hot springs. Stay because you fell asleep.',
+  'east:38,16':'CARLOSBAD GYM. Leader: HOT TUB CARLOS. "No splashing."',
 };
 const LABELS=[{map:'world',x:5,y:7,w:6,text:'MART'},{map:'world',x:18,y:7,w:6,text:'CENTER'},{map:'world',x:11,y:55,w:8,text:'LAB'},
-  {map:'north',x:10,y:5,w:10,text:'GYM'},{map:'north',x:4,y:15,w:6,text:'CENTER'},{map:'north',x:20,y:15,w:6,text:'MART'}];
-const SOLID=new Set('#~FSrbgovWwdXTBCKHpQP'.split(''));
+  {map:'north',x:10,y:5,w:10,text:'GYM'},{map:'north',x:4,y:15,w:6,text:'CENTER'},{map:'north',x:20,y:15,w:6,text:'MART'},
+  {map:'east',x:36,y:7,w:6,text:'CENTER'},{map:'east',x:46,y:7,w:6,text:'MART'},{map:'east',x:39,y:15,w:10,text:'GYM'}];
+const SOLID=new Set('#~FSrbgovtWwdXTBCKHpQPRsGyzlnUeOIiYZJ%V'.split(''));
 
 function tileAt(map,x,y){ const r=MAPS[map].rows[y]; return (r&&r[x])||'#'; }
 function areaName(){
+  const a=MAPS[G.map].area; if(a) return typeof a==='function'?a(G):a;
   if(G.map==='world') return G.y<20?'CARLOS CITY':G.y<44?'ROUTE 1':'CARLOSVILLE';
   if(G.map==='north') return G.y<26?'SAN CARLOS':'ROUTE 2';
-  return {gym:'SAN CARLOS GYM',house:'YOUR HOUSE',lab:"PROF. CARLOS's LAB",mart:'CARLOSMART',center:'CARLOSCENTER'}[G.map];
+  if(G.map==='east') return G.x<28?'ROUTE 3':'CARLOSBAD';
+  return {cave:'CARLOS CAVERNS',gym2:'CARLOSBAD GYM',gym:'SAN CARLOS GYM',house:'YOUR HOUSE',lab:"PROF. CARLOS's LAB",mart:'CARLOSMART',center:'CARLOSCENTER'}[G.map];
 }
 
 // ---------------------------- MONSTERS --------------------------------
@@ -390,15 +557,15 @@ function stat(m,k){
 }
 function makeMon(sp,lvl){
   const m={sp,lvl,exp:lvl**3,moves:[]};
-  for(const [l,mvn] of SPECIES[sp].moves) if(l<=lvl) m.moves.push(mvn);
+  for(const [l,mvn] of learnset(sp)) if(l<=lvl&&!m.moves.includes(mvn)) m.moves.push(mvn);
   m.moves=m.moves.slice(-4);
   m.hp=stat(m,'hp');
   return m;
 }
-function healAll(){ G.party.forEach(m=>m.hp=stat(m,'hp')); }
-function typeMult(a,d){ if(TYPES[a].beats===d) return 2; if(TYPES[d].beats===a) return .5; return 1; }
+function healAll(){ G.party.forEach(m=>m.hp=stat(m,'hp')); jingle('heal'); }
+function typeMult(a,d){ if(TYPES[a].beats.includes(d)) return 2; if(TYPES[d].beats.includes(a)) return .5; return 1; }
 function wildMon(){
-  const tb=G.map==='north'?ROUTE2:ROUTE1;
+  const tb=WILD[G.map]||ROUTE1;
   let r=Math.random()*tb.reduce((s,e)=>s+e[1],0);
   for(const [sp,w,lo,hi] of tb){ if((r-=w)<0) return makeMon(sp,lo+rnd(hi-lo+1)); }
   return makeMon('late',3);
@@ -460,6 +627,7 @@ document.querySelectorAll('[data-btn]').forEach(el=>{
 function onPress(b){
   const mn=ui.menus[ui.menus.length-1];
   if(mn){
+    sfx(b==='A'?'ok':b==='B'?(mn.cancel?'back':null):(b==='up'||b==='down')&&mn.opts.length>1?'move':null);
     if(b==='up') mn.sel=(mn.sel+mn.opts.length-1)%mn.opts.length;
     else if(b==='down') mn.sel=(mn.sel+1)%mn.opts.length;
     else if(b==='A'){ ui.menus.pop(); mn.res(mn.sel); }
@@ -469,6 +637,7 @@ function onPress(b){
   const t=ui.text;
   if(t&&t.wait){
     if(b!=='A'&&b!=='B') return;
+    sfx('tick');
     const len=t.pages[t.page].join('').length;
     if(t.n<len) t.n=999;
     else if(t.page<t.pages.length-1){ t.page++; t.n=0; }
@@ -476,10 +645,10 @@ function onPress(b){
     return;
   }
   if(busy) return;
-  if(scene==='title'){ if(b==='A'||b==='START') script(titleMenu); return; }
+  if(scene==='title'){ if(b==='A'||b==='START'){ sfx('ok'); script(titleMenu); } return; }
   if(scene==='world'&&!mv){
     if(b==='A') interact();
-    else if(b==='START') script(startMenu);
+    else if(b==='START'){ sfx('ok'); script(startMenu); }
   }
 }
 
@@ -499,7 +668,7 @@ function ballEnt(sp,x){
       const r=rivalPick(sp); G.flags.rival=r;
       await say(`RIVAL CARLOS: Then I'm taking ${SPECIES[r].name}!`);
       await say("RIVAL CARLOS: Hey, Carlos! Let's find out whose Carlos is the most Carlos!");
-      const res=await battle({name:'RIVAL CARLOS',party:[makeMon(r,5)],prize:175});
+      const res=await battle({name:'RIVAL CARLOS',party:[makeMon(r,5)],prize:175,look:LOOKS.rival});
       healAll();
       await say(res==='win'?'RIVAL CARLOS: What?! I picked the wrong Carlos...':"RIVAL CARLOS: Ha! I'm the superior Carlos!");
       await say("PROF. CARLOS: Splendid, Carloses! I've patched your Carlos up, good as new.");
@@ -508,6 +677,14 @@ function ballEnt(sp,x){
       G.flags.rivalGone=true;
     } };
 }
+
+function itemEnt(id,map,x,y,give,text){
+  return { kind:'ball', map, x, y, hidden:()=>G.flags[id], talk:async()=>{
+    G.flags[id]=true; for(const k in give) G.bag[k]=(G.bag[k]||0)+give[k];
+    await say(text);
+  } };
+}
+const EVOLVED={gym:'swole',nap:'snooze',snack:'buffet'};
 
 const ENT=[
   { map:'house',x:2,y:3,dir:'right',look:LOOKS.mom, talk:async()=>{
@@ -599,7 +776,7 @@ const ENT=[
         G.badges.push('TONG BADGE'); G.bag.ball+=5;
         await say('You received the TONG BADGE from GRILLMASTER CARLOS!');
         await say('GRILLMASTER CARLOS: Take these 5 CARLOSBALLS too. There are more gyms out there, and more Carloses than you can imagine.');
-        await say('That is the end of the road for now. More Carlos coming soon!');
+        await say('GRILLMASTER CARLOS: RANGER CARLOS on the east side of town will let you onto ROUTE 3 now. CARLOSBAD is past the caverns.');
         save();
       } } },
   { map:'world',x:10,y:12,dir:'down',look:LOOKS.towny1, talk:async()=>{
@@ -607,7 +784,77 @@ const ENT=[
     } },
   { map:'world',x:22,y:11,dir:'down',look:LOOKS.towny2, talk:async()=>{
       await say('COOL CARLOS: HYPE beats SNACK. SNACK beats CHILL. CHILL beats HYPE. Write that down.');
+      await say('COOL CARLOS: There are more types out there, too. Open the MENU and pick TYPES to see the whole chart.');
     } },
+
+  // ---- Route 3, the caverns and Carlosbad
+  { map:'north',x:27,y:17,dir:'left',look:LOOKS.ranger, hidden:()=>G.badges.includes('TONG BADGE'), talk:async()=>{
+      await say("RANGER CARLOS: ROUTE 3 and the caverns are no joke, Carlos. Come back when you have the TONG BADGE from the GYM.");
+    } },
+  { map:'north',x:26,y:16,dir:'down',look:LOOKS.ranger, hidden:()=>!G.badges.includes('TONG BADGE'), talk:async()=>{
+      await say("RANGER CARLOS: A TONG BADGE! Go right ahead. ROUTE 3 is east, then through CARLOS CAVERNS to CARLOSBAD.");
+    } },
+  itemEnt('i1','east',3,19,{cola:2},'You found 2 CARLOS COLAS in the grass! Still cold, somehow.'),
+  itemEnt('i2','cave',4,16,{ball:3,big:1},'You found 3 CARLOSBALLS and a BIG GULP COLA! Somebody left their whole bag down here.'),
+  { id:'t6', map:'east',x:15,y:9,dir:'down',look:SPECIES.cyclist.look,
+    trainer:{name:'CYCLIST CARLOS',party:[['cyclist',11],['dj',11]],prize:220,
+      intro:'CYCLIST CARLOS: On your left! Actually, stop. Battle me.',
+      outro:'CYCLIST CARLOS: I was not even at full cadence.'} },
+  { id:'t7', map:'east',x:21,y:10,dir:'down',look:SPECIES.picnic.look,
+    trainer:{name:'PICNIC CARLOS',party:[['picnic',11],['taco',11],['dad',11]],prize:240,
+      intro:'PICNIC CARLOS: You stepped on my blanket, Carlos. That means war.',
+      outro:'PICNIC CARLOS: Fine. Have a sandwich.'} },
+  { id:'t8', map:'east',x:26,y:13,dir:'up',look:SPECIES.birder.look,
+    trainer:{name:'BIRDER CARLOS',party:[['birder',12],['fishing',12]],prize:260,
+      intro:'BIRDER CARLOS: Shh! A rare Carlos! Oh. It is just you. Battle anyway.',
+      outro:'BIRDER CARLOS: I am writing this down as a loss. In my loss journal.'} },
+  { id:'c1', map:'cave',x:12,y:3,dir:'right',look:LOOKS.explorer,
+    trainer:{name:'EXPLORER CARLOS',party:[['caver',13],['lost',12]],prize:300,
+      intro:'EXPLORER CARLOS: I have mapped this whole cave! Battle me and I will tell you nothing about it.',
+      outro:'EXPLORER CARLOS: The exit is east. There. I told you something.'} },
+  { id:'c2', map:'cave',x:19,y:8,dir:'right',look:SPECIES.goth.look,
+    trainer:{name:'BROODING CARLOS',party:[['goth',13],['tinfoil',13]],prize:320,
+      intro:'BROODING CARLOS: You bring light into my darkness. I hate it. Battle me.',
+      outro:'BROODING CARLOS: Defeat. How fitting.'} },
+  { id:'rival2', map:'east',x:37,y:11,dir:'left',look:LOOKS.rival,
+    trainer:{name:'RIVAL CARLOS',prize:600,
+      party:()=>[['cyclist',13],['caveman',14],[EVOLVED[G.flags.rival]||'swole',16]],
+      intro:"RIVAL CARLOS: Carlos! You only just got through the cave? I have been in the hot springs for hours. Let's see if you got any better!",
+      outro:'RIVAL CARLOS: Unbelievable. I am going back in the hot tub.',
+      after:'RIVAL CARLOS: The GYM here is all CHILL-types. I am not telling you how I beat it. (I have not beaten it.)'} },
+  { map:'east',x:41,y:13,dir:'up',look:LOOKS.towny1, talk:async()=>{
+      await say('SOAKED CARLOS: WEIRD-type Carloses from the caverns really rattle CHILL-types. Nobody can relax around a CAVEMAN CARLOS.');
+    } },
+  { map:'east',x:46,y:10,dir:'down',look:LOOKS.towny2, talk:async()=>{
+      await say('LOCAL CARLOS: A WEIRD Carlos giving you trouble? Send out a REGULAR one. Nothing shuts down weird like aggressively normal.');
+    } },
+  { map:'east',x:51,y:10,dir:'down',look:LOOKS.builder, talk:async()=>{
+      await say("CONSTRUCTION CARLOS: Me again. The road east is flooded with hot spring water, for good. ROUTE 4 goes north instead, past the springs.");
+    } },
+  { map:'gym2',x:7,y:8,dir:'left',look:LOOKS.guide, talk:async()=>{
+      await say(G.badges.includes('SOAK BADGE')?'GYM GUIDE CARLOS: Two badges! You are basically famous, Carlos.':
+        "GYM GUIDE CARLOS: Yo, champ! HOT TUB CARLOS uses CHILL-types. SNACK and WEIRD moves ruin their vibe. Keep your HYPE Carloses out of the water!");
+    } },
+  { id:'g2', map:'gym2',x:1,y:7,dir:'right',look:LOOKS.towel,
+    trainer:{name:'TOWEL CARLOS',party:[['fishing',14],['birder',14]],prize:350,
+      intro:'TOWEL CARLOS: No shoes past this point! Also, battle.',
+      outro:'TOWEL CARLOS: Fresh towels are by the door.'} },
+  { id:'g3', map:'gym2',x:6,y:4,dir:'right',look:LOOKS.sauna,
+    trainer:{name:'SAUNA CARLOS',party:[['yoga',15],['monday',15]],prize:380,
+      intro:'SAUNA CARLOS: Is it hot in here or is it just my Carloses?',
+      outro:'SAUNA CARLOS: It was just hot in here.'} },
+  { id:'gym2', map:'gym2',x:5,y:1,dir:'down',look:LOOKS.leader2,
+    trainer:{name:'HOT TUB CARLOS',noSight:true,party:[['yoga',16],['snooze',17],['spa',19]],prize:900,
+      intro:"HOT TUB CARLOS: Ahh. A challenger. I'm HOT TUB CARLOS, leader of the CARLOSBAD GYM. I would get up, but no. Let's do this from here.",
+      outro:'HOT TUB CARLOS: You harshed my mellow, Carlos. Respect.',
+      after:'HOT TUB CARLOS: The water is perfect. You should get in. Bring your Carloses.',
+      onWin:async()=>{
+        G.badges.push('SOAK BADGE'); G.bag.ball+=5; G.bag.big=(G.bag.big||0)+2;
+        await say('You received the SOAK BADGE from HOT TUB CARLOS!');
+        await say('HOT TUB CARLOS: Take 5 CARLOSBALLS and a couple of BIG GULP COLAS. Hydration is important.');
+        await say('HOT TUB CARLOS: ROUTE 4 is open to you now, north past the springs. PUERTO CARLOS has a GYM that never sleeps.');
+        save();
+      } } },
 
   { map:'mart',x:1,y:2,dir:'down',look:LOOKS.clerk, talk:shop },
   { map:'center',x:2,y:2,dir:'down',look:LOOKS.nurse, talk:async()=>{
@@ -629,16 +876,37 @@ async function shop(){
   } else await say('CLERK CARLOS: Welcome back to the CARLOSMART!');
   while(true){
     setText(`Money: $${G.money}   CARLOSBALLS: ${G.bag.ball}   COLAS: ${G.bag.cola}`);
-    const c=await menu([`CARLOSBALL   $${PRICES.ball}`,`CARLOS COLA  $${PRICES.cola}`,'LEAVE'],{w:124});
-    if(c<0||c===2) break;
-    const key=c===0?'ball':'cola';
+    const c=await menu([`CARLOSBALL   $${PRICES.ball}`,`CARLOS COLA  $${PRICES.cola}`,`BIG GULP     $${PRICES.big}`,'LEAVE'],{w:124});
+    if(c<0||c===3) break;
+    const key=['ball','cola','big'][c];
     if(G.money<PRICES[key]){ await say("CLERK CARLOS: You don't have enough money, Carlos."); continue; }
-    G.money-=PRICES[key]; G.bag[key]++;
+    G.money-=PRICES[key]; G.bag[key]=(G.bag[key]||0)+1;
   }
   await say('CLERK CARLOS: Come again, Carlos!');
 }
 
 // ---------------------------- OVERWORLD -------------------------------
+// Never leave the player standing inside something solid (e.g. an old save after a map changed).
+function ensureSafe(){
+  const ok=(x,y)=>canWalk(G.map,x,y)&&!WARPS[G.map+':'+x+','+y]&&tileAt(G.map,x,y)!=='M';
+  if(canWalk(G.map,G.x,G.y)) return;
+  for(let r=1;r<40;r++) for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+    if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+    if(ok(G.x+dx,G.y+dy)){ G.x+=dx; G.y+=dy; return; }
+  }
+}
+// Saves from before the zones were redrawn: move anyone in those zones to the town's bus stop.
+function migrateSave(){
+  const Z=['s4','s5','s6','s7','s8'];
+  if((G.layoutV||1)<2){
+    const stop=m=>{ const b=BUS.find(b=>b.map===m); return {map:m,x:b.x,y:b.y,dir:'down'}; };
+    if(Z.includes(G.map)) Object.assign(G,stop(G.map));
+    if(G.ret&&Z.includes(G.ret.map)) G.ret=stop(G.ret.map);
+    if(G.heal&&G.heal.ret&&Z.includes(G.heal.ret.map)) G.heal.ret=stop(G.heal.ret.map);
+    G.layoutV=2;
+  }
+  ensureSafe();
+}
 function canWalk(map,x,y){
   const m=MAPS[map]; if(y<0||y>=m.rows.length||x<0||x>=m.rows[0].length) return false;
   return !SOLID.has(m.rows[y][x]) && !entityAt(map,x,y);
@@ -646,12 +914,15 @@ function canWalk(map,x,y){
 function tryMove(dir){
   G.dir=dir; const [dx,dy]=DIRS[dir];
   if(canWalk(G.map,G.x+dx,G.y+dy)) mv={dx,dy,t:0};
+  else if(frame-(tryMove.last||0)>24){ tryMove.last=frame; sfx('bump'); }
 }
-function showBanner(){ const n=areaName(); if(n!==banner.text){ banner.text=n; banner.t=130; } }
+function showBanner(){ const n=areaName(); G.seen[n]=true; if(n!==banner.text){ banner.text=n; banner.t=130; } }
 async function warpTo(w){
+  sfx('door');
   await fadeTo(1);
-  if(!MAPS[w.map].outside) G.ret={map:G.map,x:G.x,y:G.y+1,dir:'down'};
+  if(!MAPS[w.map].outside) G.ret=w.ret||{map:G.map,x:G.x,y:G.y+1,dir:'down'};
   G.map=w.map; G.x=w.x; G.y=w.y; G.dir=w.dir;
+  ensureSafe();
   showBanner();
   await fadeTo(0);
 }
@@ -662,7 +933,7 @@ function arrive(){
   if(t==='M'){ script(()=>warpTo(G.ret||EXITS[G.map])); return; }
   showBanner();
   if(checkTrainers()) return;
-  if(t===':'&&G.party.length&&Math.random()<.13){
+  if(G.party.length&&((t===':'&&Math.random()<.13)||((t==='c'||t==='h')&&Math.random()<.055))){
     script(async()=>{ const r=await battle({wild:true,party:[wildMon()]}); if(r==='lose') await blackout(); });
   }
 }
@@ -682,7 +953,7 @@ async function trainerBattle(e,spotted){
   if(spotted){ e.alert=frame+45; await sleep(700); }
   const tr=e.trainer;
   await say(tr.intro);
-  const r=await battle({name:tr.name,party:tr.party.map(([sp,l])=>makeMon(sp,l)),prize:tr.prize});
+  const r=await battle({name:tr.name,party:(typeof tr.party==='function'?tr.party():tr.party).map(([sp,l])=>makeMon(sp,l)),prize:tr.prize,boss:!!tr.noSight,look:e.look});
   if(r==='win'){ G.beaten[e.id]=true; await say(tr.outro); if(tr.onWin) await tr.onWin(); }
   else await blackout();
 }
@@ -698,15 +969,19 @@ function interact(){
   let t=tileAt(G.map,x,y), e=entityAt(G.map,x,y);
   if(!e&&t==='C') e=entityAt(G.map,x+dx,y+dy);     // talk across a counter
   if(e){
-    if(e.look) e.dir=OPP[G.dir];
+    if(e.look&&!e.still) e.dir=OPP[G.dir];
     if(e.trainer) script(G.beaten[e.id]?()=>say(e.trainer.after||e.trainer.outro):()=>trainerBattle(e,false));
     else script(e.talk);
     return;
   }
   const msg={
     S:SIGNS[G.map+':'+x+','+y]||SIGNS[x+','+y], P:null, Q:'A grill. It is hot. Do not touch the grill.', d:"It's locked. Nobody's home.", K:'Shelves full of books about Carlos. All of them.',
-    B:"Your bed. No time for a nap, there are Carloses out there.", H:'A machine that goes "ding" when your Carloses are healed.',
+    B:G.map==='house'?"Your bed. No time for a nap, there are Carloses out there.":'A bed. Not yours. Carlos would be upset.', G:'A gravestone. It says CARLOS. They all say CARLOS.', H:'A machine that goes "ding" when your Carloses are healed.',
     p:'A houseplant. It is not a Carlos. Probably.', '~':'The water looks cold. Carlos-cold.',
+    y:'A palm tree. Coconuts not included.', z:'A dead tree. It looks like it is judging you.', U:'A fountain. Someone threw a CARLOSBALL in for luck.',
+    l:'A street lamp.', e:'A bench. Nobody is sitting on it. Probably a ghost is.', n:'A neatly trimmed hedge.', O:'A big rock.',
+    Y:'A boat. It is named CARLOS.', Z:'A tall building. Every window has a Carlos in it.', V:'A parked car. The license plate says CARLOS.',
+    J:'An iron fence.', I:'The lighthouse. It keeps the Carloses off the rocks.', i:'The lighthouse lamp.', '%':'Old stone. It is cold to the touch.',
     T:G.map==='house'?'Mom Carlos left you a note: "Go see Professor Carlos!"':null,
   }[t];
   if(t==='P'){ script(pcMenu); return; }
@@ -726,12 +1001,13 @@ async function startMenu(){
       if(i>0 && await yesNo(`Put ${s.name} at the front of your party?`)){ G.party.splice(i,1); G.party.unshift(m); }
     } else if(c===1){
       setText(`Money: $${G.money}   CARLOSBALLS: ${G.bag.ball}   CARLOS COLAS: ${G.bag.cola}`);
-      const j=await menu(['USE COLA','BACK'],{w:76});
-      if(j===0){
-        if(!G.bag.cola){ await say('You have no CARLOS COLA.'); continue; }
+      const j=await menu([`COLA x${G.bag.cola}`,`BIG GULP x${G.bag.big||0}`,'BACK'],{w:92});
+      if(j===0||j===1){
+        const key=j?'big':'cola';
+        if(!G.bag[key]){ await say('You are out of those.'); continue; }
         if(!G.party.length){ await say('Nobody to give it to.'); continue; }
-        const i=await pickMon('Give CARLOS COLA to which Carlos?');
-        if(i>=0) await useCola(G.party[i]);
+        const i=await pickMon('Give it to which Carlos?');
+        if(i>=0) await useCola(G.party[i],key);
       }
     } else if(c===2){
       await say(`TRAINER: CARLOS.  Money: $${G.money}.  Carloses owned: ${G.party.length+G.box.length}.  Badges: ${G.badges.length?G.badges.join(', '):'none yet'}.`);
@@ -758,11 +1034,12 @@ async function pcMenu(){
     } else break;
   }
 }
-async function useCola(m){
+async function useCola(m,key){
+  key=key||'cola';
   if(m.hp<=0){ await say(`${nm(m)} has fainted. Cola can't fix that.`); return false; }
   if(m.hp>=stat(m,'hp')){ await say(`${nm(m)} is already at full HP.`); return false; }
-  G.bag.cola--; m.hp=Math.min(stat(m,'hp'),m.hp+COLA_HEAL);
-  await say(`${nm(m)} chugged the CARLOS COLA and recovered HP!`);
+  G.bag[key]--; m.hp=Math.min(stat(m,'hp'),m.hp+(key==='big'?BIG_HEAL:COLA_HEAL));
+  await say(`${nm(m)} chugged the ${key==='big'?'BIG GULP COLA':'CARLOS COLA'} and recovered HP!`);
   return true;
 }
 
@@ -775,7 +1052,7 @@ async function titleMenu(){
   let c=1;
   if(sv){ c=await menu(['CONTINUE','NEW GAME'],{x:84,y:120,w:72}); if(c<0) return; }
   await fadeTo(1);
-  if(sv&&c===0){ G=Object.assign(freshGame(),sv); if(!G.flags.freeBalls&&G.map==='world'&&G.y<4) G.y=5; scene='world'; showBanner(); await fadeTo(0); return; }
+  if(sv&&c===0){ G=Object.assign(freshGame(),sv,{layoutV:sv.layoutV||1}); migrateSave(); G.bag=Object.assign({ball:0,cola:0,big:0},G.bag); if(G.map==='world'&&G.x===7&&G.y===17&&G.badges.length<7) G.y=18; if(!G.flags.freeBalls&&G.map==='world'&&G.y<4) G.y=5; scene='world'; showBanner(); await fadeTo(0); return; }
   G=freshGame(); scene='world'; showBanner();
   await fadeTo(0);
   await say('Welcome to the world of CARLOS!');
@@ -787,18 +1064,31 @@ async function titleMenu(){
 const stageMult=s=>s>=0?(2+s)/2:2/(2-s);
 const label=who=>who==='me'?nm(B.me):(B.wild?'Wild ':'Foe ')+nm(B.foe);
 
+async function battleIntro(kind){
+  AU.override=null; sfx('encounter');
+  for(let i=0;i<3;i++){ fx.flash='#ffffff'; await sleep(55); fx.flash='#000000'; await sleep(55); }
+  fx.flash=null;
+  fx.wipe={type:kind==='wild'?'bars':kind==='trainer'?'spiral':'iris',p:0};
+  for(let i=1;i<=26;i++){ fx.wipe.p=i/26; await sleep(24); }
+  fx.a=1; fx.wipe=null; await sleep(90);
+}
+async function slideOut(who){   // a trainer steps aside before their Carlos comes out
+  for(let i=1;i<=10;i++){ B.tOff[who]=i/10; await sleep(22); }
+  if(who==='foe') B.trainerFoe=null; else B.trainerMe=false;
+}
 async function battle(o){
-  for(let i=0;i<3;i++){ fx.a=.9; await sleep(70); fx.a=0; await sleep(70); }
-  await fadeTo(1);
+  const kind=o.wild?(o.boss?'legend':'wild'):(o.boss||/RIVAL|CHAMPION|BOSS/.test(o.name||''))?'leader':'trainer';
+  await battleIntro(kind);
   const foes=o.party; let fi=0, result;
-  B={foe:foes[0],me:G.party.find(m=>m.hp>0),wild:!!o.wild,name:o.name,showFoe:!!o.wild,showMe:false,
+  B={foe:foes[0],me:G.party.find(m=>m.hp>0),wild:!!o.wild,name:o.name,music:kind==='wild'?'wild':kind==='trainer'?'trainer':'leader',showFoe:!!o.wild,showMe:false,slide:0,tOff:{foe:0,me:0},trainerFoe:o.wild?null:(o.look||null),trainerMe:true,
      st:{me:{atk:0,def:0},foe:{atk:0,def:0}},hpS:{},hit:{},ball:null};
   B.hpS.me=B.me.hp; B.hpS.foe=B.foe.hp;
-  scene='battle'; ui.text=null;
-  await fadeTo(0);
+  scene='battle'; ui.text=null; AU.override=B.music;
+  fx.a=0;
+  for(let i=1;i<=20;i++){ B.slide=i/20; await sleep(26); }
   if(o.wild) await say(`A wild ${nm(B.foe)} appeared!`);
-  else { await say(`${o.name} wants to battle!`); B.showFoe=true; await say(`${o.name} sent out ${nm(B.foe)}!`); }
-  B.showMe=true; await say(`Go! ${nm(B.me)}!`);
+  else { await say(`${o.name} wants to battle!`); if(B.trainerFoe) await slideOut('foe'); B.showFoe=true; sfx('send'); await say(`${o.name} sent out ${nm(B.foe)}!`); }
+  await slideOut('me'); B.showMe=true; sfx('send'); await say(`Go! ${nm(B.me)}!`);
 
   while(true){
     // ---- choose an action
@@ -811,14 +1101,14 @@ async function battle(o){
         const i=await menu(ms.map(n=>n.padEnd(18)+MOVES[n].type),{w:164});
         if(i>=0) act={t:'move',mv:ms[i]};
       } else if(c===1){
-        const i=await menu([`CARLOSBALL x${G.bag.ball}`,`CARLOS COLA x${G.bag.cola}`],{w:108});
-        if(i===0){
-          if(!o.wild) await say("You can't catch someone else's Carlos! That's just rude.");
-          else if(!G.bag.ball) await say('You have no CARLOSBALLS! The CARLOSMART in CARLOS CITY sells them.');
-          else act={t:'ball'};
-        } else if(i===1){
-          if(!G.bag.cola) await say('You have no CARLOS COLA.');
-          else if(await useCola(B.me)) act={t:'item'};
+        const keys=Object.keys(ITEMS).filter(k=>k==='ball'||G.bag[k]);
+        const i=await menu(keys.map(k=>`${ITEMS[k].name} x${G.bag[k]||0}`),{w:112});
+        if(i>=0){
+          const k=keys[i];
+          if(ITEMS[k].heal){ if(await useCola(B.me,k)) act={t:'item'}; }
+          else if(!o.wild) await say("You can't catch someone else's Carlos! That's just rude.");
+          else if(!G.bag[k]) await say('You have no CARLOSBALLS! Any CARLOSMART sells them.');
+          else act={t:'ball',key:k};
         }
       } else if(c===2){
         const i=await pickMon('Switch to which Carlos?');
@@ -834,14 +1124,14 @@ async function battle(o){
     }
     // ---- your non-attack actions happen first
     if(act.t==='run'){
-      if(Math.random()<.9){ await say('Got away safely!'); result='run'; break; }
+      if(Math.random()<.9){ sfx('run'); await say('Got away safely!'); result='run'; break; }
       await say("Couldn't get away!");
     } else if(act.t==='switch'){
       await say(`${nm(B.me)}, come back!`);
       B.me=G.party[act.i]; B.st.me={atk:0,def:0}; B.hpS.me=B.me.hp;
       await say(`Go! ${nm(B.me)}!`);
     } else if(act.t==='ball'){
-      if(await throwBall()){ result='caught'; break; }
+      if(await throwBall(act.key)){ result='caught'; break; }
     }
     // ---- attacks, fastest first
     const foeMove=pick(B.foe.moves);
@@ -852,8 +1142,8 @@ async function battle(o){
     }
     // ---- faints
     if(B.foe.hp<=0){
-      await say(`${label('foe')} fainted!`); B.showFoe=false;
-      await gainExp(B.me,Math.floor(SPECIES[B.foe.sp].exp*B.foe.lvl/7*(o.wild?1:1.5)));
+      sfx('faint'); await say(`${label('foe')} fainted!`); B.showFoe=false;
+      await gainExp(B.me,Math.floor(SPECIES[B.foe.sp].exp*B.foe.lvl/7*(o.wild?1:1.6)));
       if(++fi<foes.length){
         B.foe=foes[fi]; B.st.foe={atk:0,def:0}; B.hpS.foe=B.foe.hp; B.showFoe=true;
         await say(`${o.name} sent out ${nm(B.foe)}!`);
@@ -862,7 +1152,7 @@ async function battle(o){
       result='win'; break;
     }
     if(B.me.hp<=0){
-      await say(`${nm(B.me)} fainted!`);
+      sfx('faint'); await say(`${nm(B.me)} fainted!`);
       if(!G.party.some(m=>m.hp>0)){ result='lose'; break; }
       let i=-1;
       while(i<0||G.party[i].hp<=0) i=await pickMon('Send out which Carlos?');
@@ -870,13 +1160,14 @@ async function battle(o){
       await say(`Go! ${nm(B.me)}!`);
     }
   }
+  if(result==='win'||result==='caught'){ AU.override=null; setTrack(null); jingle(result==='win'?'win':'catch'); }
   if(result==='win'&&!o.wild){
     await say(`You defeated ${o.name}!`);
     G.money+=o.prize; await say(`You got $${o.prize} for winning!`);
   }
   if(result==='lose') await say("You're out of Carloses that can battle!");
   await fadeTo(1);
-  scene='world'; B=null; ui.text=null;
+  scene='world'; B=null; ui.text=null; AU.override=undefined;
   await fadeTo(0);
   return result;
 }
@@ -885,17 +1176,18 @@ async function useMove(who,name){
   const me=who==='me', A=me?B.me:B.foe, D=me?B.foe:B.me, dk=me?'foe':'me';
   const m=MOVES[name];
   await say(`${label(who)} used ${name.toUpperCase()}!`);
-  if(Math.random()*100>=(m.acc||100)){ await say('But it missed!'); return; }
+  if(Math.random()*100>=(m.acc||100)){ sfx('miss'); await say('But it missed!'); return; }
+  sfx('atk',m.type);
   if(m.kind==='heal'){
     const max=stat(A,'hp');
     if(A.hp>=max){ await say('But nothing happened!'); return; }
-    A.hp=Math.min(max,A.hp+Math.ceil(max/2)); await sleep(500);
+    A.hp=Math.min(max,A.hp+Math.ceil(max/2)); sfx('heal',null,.3); await sleep(500);
     await say(`${label(who)} feels refreshed!`);
   } else if(m.kind==='atkDown'||m.kind==='defDown'){
     const k=m.kind==='atkDown'?'atk':'def';
     if(m.flavor) await say(m.flavor);
     if(B.st[dk][k]<=-6){ await say('But nothing happened!'); return; }
-    B.st[dk][k]--;
+    B.st[dk][k]--; sfx('down');
     await say(`${label(dk)}'s ${k==='atk'?'ATTACK':'DEFENSE'} fell!`);
   } else {
     const eff=typeMult(m.type,SPECIES[D.sp].type);
@@ -905,7 +1197,7 @@ async function useMove(who,name){
     let dmg=Math.floor(((2*A.lvl/5+2)*m.power*atk/def)/50+2);
     dmg=Math.max(1,Math.floor(dmg*eff*crit*stab*(.85+Math.random()*.15)));
     D.hp=Math.max(0,D.hp-dmg);
-    B.hit[dk]=frame+30;
+    B.hit[dk]=frame+30; sfx(eff>1?'hitbig':eff<1?'hitweak':'hit',null,.24); if(crit>1) sfx('crit',null,.3);
     await sleep(650);
     if(m.flavor) await say(m.flavor);
     if(crit>1) await say('A critical hit!');
@@ -919,8 +1211,9 @@ async function gainExp(m,amount){
   await say(`${nm(m)} gained ${amount} EXP!`);
   while(m.exp>=(m.lvl+1)**3 && m.lvl<100){
     const old=stat(m,'hp'); m.lvl++; m.hp+=stat(m,'hp')-old;
+    jingle('level');
     await say(`${nm(m)} grew to level ${m.lvl}!`);
-    for(const [l,mvn] of SPECIES[m.sp].moves){
+    for(const [l,mvn] of learnset(m.sp)){
       if(l===m.lvl&&!m.moves.includes(mvn)){
         if(m.moves.length>=4) m.moves.shift();
         m.moves.push(mvn);
@@ -966,35 +1259,50 @@ async function throwBall(){
 // ---------------------------- DRAWING ---------------------------------
 const R=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
 
-// Draws a Carlos on a 16x16 grid, each cell k pixels. Used for people AND monsters.
-function drawCarlos(ox,oy,k,look,dir,step,flip){
-  look=look||{}; dir=dir||'down';
+// ------------------------------- ART ----------------------------------
+// Everything is drawn in code. Characters are painted once into a small
+// canvas (with a dark outline) and reused; each map is painted once into
+// a big canvas, and only animated tiles (water, flowers...) are redrawn.
+
+function hexRGB(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h.slice(0,6),16); return [n>>16&255,n>>8&255,n&255]; }
+function shadeCol(h,f){   // f<0 darkens, f>0 lightens
+  if(typeof h!=='string'||h[0]!=='#') return h;
+  const m=v=>Math.max(0,Math.min(255,Math.round(f<0?v*(1+f):v+(255-v)*f)));
+  const [r,g,b]=hexRGB(h); return 'rgb('+m(r)+','+m(g)+','+m(b)+')';
+}
+
+// Draws a Carlos on a 16x16 grid. Used for people AND monsters.
+function paintCarlos(c,ox,oy,look,dir,step,flip){
   const skin=look.skin||'#e2ac7c', hair=look.hair||'#6b4226', shirt=look.shirt||'#4a78c8', pants=look.pants||'#35405c';
-  const p=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(ox+(flip?16-x-w:x)*k,oy+y*k,w*k,h*k); };
-  const l1=step===1?1:0, l2=step===2?1:0;
+  const p=(x,y,w,h,col)=>{ c.fillStyle=col; c.fillRect(ox+(flip?16-x-w:x),oy+y,w,h); };
+  const l1=step===1?1:0, l2=step===2?1:0, sd=shadeCol(shirt,-.22);
   p(5,13,2,2-l1,pants); p(9,13,2,2-l2,pants); p(5,15-l1,2,1,'#20202a'); p(9,15-l2,2,1,'#20202a');
+  p(9,13,2,1,shadeCol(pants,-.25));
   p(4,8,8,5,shirt); p(3,8,1,4,shirt); p(12,8,1,4,shirt); p(3,12,1,1,skin); p(12,12,1,1,skin);
-  if(look.wide){ p(2,8,1,4,shirt); p(13,8,1,4,shirt); }
+  p(4,12,8,1,sd); p(12,8,1,4,sd); p(11,9,1,3,sd); p(5,8,3,1,shadeCol(shirt,.18));
+  if(look.wide){ p(2,8,1,4,shirt); p(13,8,1,4,sd); }
   if(look.sleeveless){ p(3,8,1,4,skin); p(12,8,1,4,skin); p(2,8,1,3,skin); p(13,8,1,3,skin); }
-  if(look.robe){ p(4,8,8,7,shirt); p(7,8,2,7,'#ffffff'); }
+  if(look.robe){ p(4,8,8,7,shirt); p(7,8,2,7,'#ffffff'); p(10,9,2,6,sd); }
   if(look.bib&&dir!=='up'){ p(6,8,4,3,'#ffffff'); }
-  if(look.coat){ p(4,8,3,5,'#f4f4f4'); p(9,8,3,5,'#f4f4f4'); p(3,8,1,4,'#f4f4f4'); p(12,8,1,4,'#f4f4f4'); }
+  if(look.coat){ p(4,8,3,5,'#f4f4f4'); p(9,8,3,5,'#e4e6ea'); p(3,8,1,4,'#f4f4f4'); p(12,8,1,4,'#d8dbe0'); }
   if(look.apron) p(5,9,6,4,'#ffffff');
   if(look.tie&&dir!=='up') p(7,8,2,4,'#b03030');
   const shade='#c48a5c';
   p(4,2,8,4,skin); p(5,6,6,1,skin); p(6,7,4,1,skin); p(7,8,2,1,skin);
-  if(dir==='up'){ p(3,1,10,6,hair); if(look.longHair) p(3,7,10,3,hair); }
+  if(dir==='up'){ p(3,1,10,6,hair); p(5,1,4,1,shadeCol(hair,.2)); if(look.longHair) p(3,7,10,3,hair); }
   else {
     p(4,1,8,2,hair); p(3,2,1,3,hair); p(12,2,1,3,hair); p(4,0,6,1,hair); p(10,1,2,1,'#855634');
+    p(5,1,3,1,shadeCol(hair,.22));
     p(4,5,1,1,shade); p(11,5,1,1,shade); p(5,6,1,1,shade); p(10,6,1,1,shade);
     if(look.longHair){ p(3,2,1,8,hair); p(12,2,1,8,hair); }
     if(look.spiky){ p(4,0,1,1,hair); p(6,0,2,1,hair); p(9,0,1,1,hair); p(11,0,1,1,hair); }
     const ex=dir==='left'?-1:dir==='right'?1:0;
-    if(look.shades) p(5+ex,4,6,2,'#15151a');
+    if(look.eyes==='cucumber'){ p(5+ex,4,2,2,'#7ac04a'); p(9+ex,4,2,2,'#7ac04a'); }
+    else if(look.shades){ p(5+ex,4,6,2,'#15151a'); p(6+ex,4,1,1,'#5a6a8a'); }
     else if(look.eyes==='sleepy'){ p(5+ex,5,2,1,'#15151a'); p(9+ex,5,2,1,'#15151a'); }
     else { p(6+ex,5,1,1,'#15151a'); p(9+ex,5,1,1,'#15151a'); }
     if(look.glasses){ p(5+ex,4,3,1,'#555'); p(8+ex,4,3,1,'#555'); }
-    if(!look.shades&&!look.glasses){ p(5+ex,4,2,1,'#3d2414'); p(9+ex,4,2,1,'#3d2414'); }
+    if(!look.shades&&!look.glasses&&look.eyes!=='cucumber'){ p(5+ex,4,2,1,'#3d2414'); p(9+ex,4,2,1,'#3d2414'); }
     if((look.mouth||'flat')!=='open') p(8+ex,6,1,1,shade);
     const mo=look.mouth||'flat';
     if(mo==='smile'){ p(7+ex,7,2,1,'#8a3b2a'); }
@@ -1003,8 +1311,12 @@ function drawCarlos(ox,oy,k,look,dir,step,flip){
     else p(7+ex,7,2,1,'#a8674a');
   }
   const hc=look.hatColor||'#d83a3a';
-  if(look.hat==='cap'){ p(4,0,8,3,hc); p(3,1,1,2,hc); p(12,1,1,2,hc); if(dir!=='up') p(dir==='right'?8:3,3,6,1,hc); }
+  if(look.hat==='cap'){ p(4,0,8,3,hc); p(3,1,1,2,hc); p(12,1,1,2,hc); p(5,0,3,1,shadeCol(hc,.25)); if(dir!=='up') p(dir==='right'?8:3,3,6,1,shadeCol(hc,-.2)); }
   else if(look.hat==='headband'){ p(3,3,10,1,hc); }
+  else if(look.hat==='helmet'){ p(4,0,8,3,hc); p(3,1,1,2,hc); p(12,1,1,2,hc); p(6,0,1,2,'#ffffff'); p(9,0,1,2,'#ffffff'); }
+  else if(look.hat==='tinfoil'){ p(4,1,8,2,'#c8ccd4'); p(5,0,6,1,'#c8ccd4'); p(7,-1,2,1,'#eef2f8'); p(5,1,2,1,'#eef2f8'); }
+  else if(look.hat==='headlamp'){ p(4,0,8,3,hc); p(3,3,10,1,'#333'); if(dir!=='up'){ p(7,1,2,2,'#fffbd0'); } }
+  else if(look.hat==='towel'){ p(4,-1,8,4,'#f4f4f4'); p(5,-2,6,1,'#f4f4f4'); p(4,1,8,1,'#d8dde6'); }
   else if(look.hat==='nightcap'){ p(4,0,8,3,hc); p(12,1,2,1,hc); p(13,2,1,2,hc); p(13,4,1,1,'#ffffff'); }
   else if(look.hat==='headset'){ p(4,0,8,1,'#333'); p(3,1,1,5,'#333'); p(12,1,1,5,'#333'); if(dir!=='up') p(10,7,3,1,'#333'); }
   if(dir==='down'){
@@ -1019,170 +1331,611 @@ function drawCarlos(ox,oy,k,look,dir,step,flip){
       case 'mug':      p(13,10,2,3,'#d8402f'); p(15,11,1,1,'#d8402f'); break;
       case 'rod':      p(14,1,1,12,'#8c6239'); p(15,1,1,6,'#e8e8e8'); p(15,7,1,1,'#e2553a'); break;
       case 'taco':     p(13,10,3,2,'#f2c230'); p(13,9,3,1,'#6aa84f'); p(14,9,1,1,'#d8402f'); break;
+      case 'basket':   p(12,10,4,3,'#b98b55'); p(12,9,4,1,'#8c6239'); p(13,7,2,2,'#8c6239'); p(13,8,2,1,shirt); break;
+      case 'binoculars': p(5,10,6,2,'#2c2c34'); p(6,10,1,1,'#8ab0e0'); p(9,10,1,1,'#8ab0e0'); break;
+      case 'phone':    p(13,7,2,4,'#22222a'); p(13,8,2,2,'#7fe0d8'); break;
+      case 'club':     p(13,6,2,7,'#8c6239'); p(12,3,4,4,'#6b4a2b'); break;
+      case 'map':      p(12,9,4,4,'#f4ecd0'); p(13,10,2,1,'#d8402f'); p(13,12,1,1,'#3f86d6'); break;
       case 'fork':     p(14,6,1,7,'#b8b8b8'); p(13,6,3,1,'#b8b8b8'); p(13,7,1,1,'#b8b8b8'); p(15,7,1,1,'#b8b8b8'); break;
     }
   }
+  if(look.fx) look.fx(p,dir,{skin,hair,shirt});
+}
+const SPR=new WeakMap(), NO_LOOK={}, SW=18, SH=23;
+function carlosSprite(look,dir,step,flip){
+  let m=SPR.get(look); if(!m){ m=new Map(); SPR.set(look,m); }
+  const key=dir+'|'+step+'|'+(flip?1:0);
+  let out=m.get(key); if(out) return out;
+  const mk=()=>{ const c=document.createElement('canvas'); c.width=SW; c.height=SH; return c; };
+  const raw=mk(); paintCarlos(raw.getContext('2d'),1,6,look,dir,step,flip);
+  const sil=mk(), sc=sil.getContext('2d');
+  sc.drawImage(raw,0,0); sc.globalCompositeOperation='source-in'; sc.fillStyle='#1d1626'; sc.fillRect(0,0,SW,SH);
+  out=mk(); const oc=out.getContext('2d');
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) oc.drawImage(sil,dx,dy);
+  oc.drawImage(raw,0,0);
+  m.set(key,out); return out;
+}
+function drawCarlos(ox,oy,k,look,dir,step,flip){
+  ctx.drawImage(carlosSprite(look||NO_LOOK,dir||'down',step||0,!!flip),ox-k,oy-6*k,SW*k,SH*k);
 }
 
 function drawBall(x,y,k){   // the CarlosBall: teal top, cream bottom, gold C badge
   const p=(a,b,w,h,c)=>R(x+a*k,y+b*k,w*k,h*k,c);
   p(2,0,4,1,'#15151a'); p(1,1,6,1,'#15151a'); p(0,2,8,4,'#15151a'); p(1,6,6,1,'#15151a'); p(2,7,4,1,'#15151a');
   p(2,1,4,1,'#2aa198'); p(1,2,6,2,'#2aa198'); p(1,4,6,2,'#f4ecd0'); p(2,6,4,1,'#f4ecd0');
+  p(1,4,6,1,'#15151a'); p(5,5,2,1,'#d8ccaa');
   p(3,3,2,2,'#f2c230'); p(2,2,1,1,'#7fe0d8');
 }
 
+// ------------------------------ TILES ---------------------------------
+const THEMES={
+  grass:{g:'#8ad46a',g2:'#72bd54',g3:'#a8e488',path:'#ead7a2',pe:'#d4bd88',peb:'#cbb17c',
+         tree:['#1c472c','#2a7840','#44a254','#7ecc6c'],tall:['#2f7a34','#4ea646','#8cd670'],flow:['#f05a6a','#fff0a0','#f8a8d8']},
+  sand: {g:'#f0e2ae',g2:'#e0cd94',g3:'#fbf3d0',path:'#d8bd86',pe:'#c4a870',peb:'#bc9e68',
+         tree:['#1c472c','#2a7840','#44a254','#7ecc6c'],tall:['#7a8c3c','#9cae50','#ccd884'],flow:['#f05a6a','#ffffff','#f8a8d8']},
+  gloom:{g:'#6c9682',g2:'#5a826e',g3:'#82aa96',path:'#bab09c',pe:'#a29884',peb:'#948a76',
+         tree:['#122824','#1c4036','#2a5a4a','#437664'],tall:['#264e3e','#386a54','#5c9278'],flow:['#b088d8','#e8e0f0','#8ab0d8']},
+  park: {g:'#84d862',g2:'#6cc24c',g3:'#a6ea86',path:'#efdcaa',pe:'#d8c290',peb:'#cdb37c',
+         tree:['#1a4a2c','#287e40','#42aa52','#84d270'],tall:['#2f7a34','#4ea646','#8cd670'],flow:['#ff6a8a','#ffe060','#ffffff']},
+};
+THEMES.city=THEMES.grass;
+function themeAt(map,ty){ const t=MAPS[map].theme; return THEMES[typeof t==='function'?t(ty):t]||THEMES.grass; }
+const hsh=(x,y,s)=>{ let h=Math.imul(x|0,374761393)^Math.imul(y|0,668265263)^Math.imul((s|0)+7,2246822519); h=Math.imul(h^(h>>>13),1274126177); return (h^(h>>>16))>>>0; };
+const ROADISH='aA=xV';
+
+function tGrass(sx,sy,tx,ty,th){
+  R(sx,sy,T,T,th.g);
+  const h=hsh(tx,ty,1);
+  if(h%3===0){ const x=sx+2+h%10, y=sy+3+(h>>5)%9; R(x,y,1,2,th.g2); R(x+2,y,1,2,th.g2); R(x+1,y+1,1,2,th.g2); }
+  if((h>>9)%4===0) R(sx+2+(h>>11)%11,sy+2+(h>>15)%11,2,1,th.g3);
+  if((h>>17)%3===0) R(sx+1+(h>>19)%13,sy+1+(h>>23)%13,1,1,th.g2);
+}
+function tPath(sx,sy,tx,ty,th,nb){
+  R(sx,sy,T,T,th.path);
+  const h=hsh(tx,ty,2);
+  if(h%2===0) R(sx+2+h%11,sy+2+(h>>4)%11,2,1,th.peb);
+  if((h>>8)%3===0) R(sx+2+(h>>10)%11,sy+2+(h>>14)%11,1,1,th.peb);
+  const isP=c=>c===','||c==='D'||c==='d'||c==='k'||c==='M'||c==='q';
+  if(!isP(nb(0,-1))) R(sx,sy,T,1,th.pe);
+  if(!isP(nb(0,1))) R(sx,sy+15,T,1,th.pe);
+  if(!isP(nb(-1,0))) R(sx,sy,1,T,th.pe);
+  if(!isP(nb(1,0))) R(sx+15,sy,1,T,th.pe);
+}
+function tWater(sx,sy,tx,ty,nb){
+  R(sx,sy,T,T,'#4c9ee4');
+  const ph=(frame>>4)+tx*3+ty*5;
+  R(sx+(ph*3)%13,sy+4,3,1,'#8ccdf6'); R(sx+(ph*5+7)%12,sy+10,4,1,'#8ccdf6');
+  if((tx*3+ty+(frame>>5))%9===0) R(sx+7,sy+7,1,1,'#ffffff');
+  const L=c=>c!=='~';
+  if(L(nb(0,-1))){ R(sx,sy,T,3,'#3a84cc'); R(sx,sy+3,T,1,'#e0f4ff'); }
+  if(L(nb(0,1))) R(sx,sy+14,T,2,'#e0f4ff');
+  if(L(nb(-1,0))) R(sx,sy,2,T,'#e0f4ff');
+  if(L(nb(1,0))) R(sx+14,sy,2,T,'#e0f4ff');
+}
+function tTall(sx,sy,tx,ty,th){
+  const [d,m,l]=th.tall;
+  R(sx,sy,T,T,d);
+  for(let j=0;j<2;j++) for(let i=0;i<2;i++){
+    const x=sx+i*8, y=sy+j*8;
+    R(x,y+3,8,4,m); R(x+1,y+1,6,2,m);
+    R(x+1,y,1,2,l); R(x+3,y+1,1,2,l); R(x+5,y,1,2,l); R(x+6,y+2,1,1,l);
+    R(x+2,y+3,1,3,l); R(x+4,y+3,1,2,l); R(x+6,y+4,1,2,l);
+    R(x,y+7,8,1,d);
+  }
+}
+function tFlowers(sx,sy,tx,ty,th){
+  tGrass(sx,sy,tx,ty,th);
+  const b=((frame>>5)+tx+ty)%2, h=hsh(tx,ty,3);
+  const fl=(x,y,c)=>{ R(x+1,y+3,1,2,'#3d8a34'); R(x+1,y,1,1,c); R(x,y+1,3,1,c); R(x+1,y+2,1,1,c); R(x+1,y+1,1,1,c==='#ffe060'||c==='#fff0a0'?'#f08a30':'#f8d040'); };
+  fl(sx+3,sy+3+b,th.flow[h%3]); fl(sx+10,sy+9-b,th.flow[(h>>3)%3]); fl(sx+11,sy+1+b,th.flow[(h>>6)%3]);
+}
+function tTree(sx,sy,tx,ty,th,nb){
+  tGrass(sx,sy,tx,ty,th);
+  const [o,d,m,l]=th.tree, B=nb(0,1)==='#', A=nb(0,-1)==='#', Lf=nb(-1,0)==='#', Rt=nb(1,0)==='#';
+  if(!B){ R(sx+2,sy+14,12,2,'rgba(0,0,0,.18)'); R(sx+6,sy+11,4,4,'#4a2e1a'); R(sx+7,sy+11,2,4,'#6e4628'); }
+  R(sx+3,sy,10,1,o); R(sx+1,sy+1,14,1,o); R(sx,sy+2,16,8,o); R(sx+1,sy+10,14,1,o); R(sx+3,sy+11,10,1,o);
+  R(sx+3,sy+1,10,1,d); R(sx+1,sy+2,14,8,d); R(sx+3,sy+10,10,1,d);
+  R(sx+3,sy+2,9,5,m); R(sx+2,sy+4,11,3,m);
+  R(sx+4,sy+2,4,2,l); R(sx+3,sy+4,2,1,l); R(sx+9,sy+4,2,1,l);
+  R(sx+5,sy+8,2,1,o); R(sx+10,sy+7,2,1,o); R(sx+3,sy+7,1,1,o);
+  if(B){ R(sx,sy+11,16,5,o); R(sx+1,sy+11,14,5,d); R(sx+4,sy+13,3,1,m); }
+  if(A) R(sx+1,sy,14,2,d);
+  if(Lf) R(sx,sy+1,2,10,d);
+  if(Rt) R(sx+14,sy+1,2,10,d);
+}
+function tUnder(sx,sy,tx,ty,nb,th){   // draw whatever ground surrounds a decoration (lamp, sign, rock...)
+  const ns=[nb(0,1),nb(0,-1),nb(-1,0),nb(1,0)];
+  if(ns.filter(c=>c==='~').length>=2) return tWater(sx,sy,tx,ty,nb);
+  const kind=c=>c===','?'path':c==='q'?'pave':ROADISH.includes(c)?'road':c==='c'?'cave':c==='h'?'tower':c==='_'?'floor':'.:f'.includes(c)?'grass':null;
+  const n={}; let best=null;
+  for(const c of ns){ const k=kind(c); if(k){ n[k]=(n[k]||0)+1; if(!best||n[k]>n[best]||(n[k]===n[best]&&k==='grass')) best=k; } }
+  if(best==='path'){ R(sx,sy,T,T,th.path); return; }
+  if(best==='pave') return tPave(sx,sy,tx,ty,()=>'q');
+  if(best==='road') return tAsphalt(sx,sy,tx,ty,()=>'a');
+  if(best==='cave'){ R(sx,sy,T,T,'#9a866c'); return; }
+  if(best==='tower'){ R(sx,sy,T,T,'#5a5068'); return; }
+  if(best==='floor') return tFloor(sx,sy,tx,ty);
+  tGrass(sx,sy,tx,ty,th);
+}
+const ROOFC={r:['#e0604a','#b4402e','#f49078'],b:['#5684d0','#3c60a6','#80aaea'],g:['#9ca8b4','#74808e','#c2ccd6'],
+             o:['#e8a242','#b4761c','#f6c878'],v:['#9466cc','#6a449e','#b892e4'],t:['#3cb0a6','#257c74','#6ad4ca']};
+function tRoof(ch,sx,sy,tx,ty,nb){
+  const [c,d,l]=ROOFC[ch], same=x=>x===ch;
+  R(sx,sy,T,T,c);
+  for(let y=3;y<16;y+=4){ R(sx,sy+y,T,1,d); for(let x=((y>>2)&1)*4+(tx&1)*8;x<16;x+=8) R(sx+x,sy+y-3,1,3,shadeCol(c,-.12)); }
+  if(!same(nb(0,-1))){ R(sx,sy,T,2,l); R(sx,sy+2,T,1,d); }
+  if(!same(nb(0,1))){ R(sx,sy+12,T,2,d); R(sx,sy+14,T,2,'#2a2028'); }
+  if(!same(nb(-1,0))){ R(sx,sy,2,T,d); R(sx,sy,1,T,'#2a2028'); }
+  if(!same(nb(1,0))){ R(sx+14,sy,2,T,d); R(sx+15,sy,1,T,'#2a2028'); }
+}
+const WALLISH='WwDd';
+function tWall(sx,sy,nb){
+  R(sx,sy,T,T,'#f2e8d0');
+  for(let y=4;y<14;y+=4) R(sx,sy+y,T,1,'#e2d4b6');
+  if(!WALLISH.includes(nb(0,-1))) R(sx,sy,T,2,'rgba(40,24,16,.22)');
+  if(!WALLISH.includes(nb(0,1))){ R(sx,sy+13,T,3,'#b8a888'); R(sx,sy+13,T,1,'#9a8a6c'); }
+  if(!WALLISH.includes(nb(-1,0))) R(sx,sy,1,T,'#9a8a6c');
+  if(!WALLISH.includes(nb(1,0))) R(sx+15,sy,1,T,'#9a8a6c');
+}
+function tWindow(sx,sy){
+  R(sx+3,sy+3,10,8,'#5e4a38'); R(sx+4,sy+4,8,6,'#86c6ee'); R(sx+4,sy+4,8,2,'#b6e0f8');
+  R(sx+7,sy+4,1,6,'#5e4a38'); R(sx+4,sy+7,8,1,'#5e4a38'); R(sx+5,sy+5,1,1,'#ffffff');
+  R(sx+2,sy+11,12,1,'#d4c4a0');
+}
+function tDoor(ch,sx,sy,nb){
+  if(nb(-1,0)==='Z'||nb(1,0)==='Z'){   // glass doors in a tower
+    R(sx,sy,T,T,'#3a4a5e'); R(sx+2,sy+2,12,14,'#26303e');
+    R(sx+3,sy+3,5,13,'#7fb2da'); R(sx+8,sy+3,5,13,'#7fb2da'); R(sx+3,sy+3,1,13,'#b6daf2'); R(sx+8,sy+3,1,13,'#b6daf2');
+    if(ch==='d'){ R(sx+4,sy+8,8,3,'#c04040'); R(sx+5,sy+9,6,1,'#f4f4f4'); }
+    return;
+  }
+  if(nb(-1,0)==='%'||nb(1,0)==='%'){ tStone(sx,sy,0,0,nb,true); R(sx+3,sy+3,10,13,'#1a1424'); R(sx+4,sy+2,8,1,'#1a1424'); R(sx+4,sy+4,8,12,'#3a2a20'); R(sx+5,sy+5,2,10,'#4a3828'); R(sx+10,sy+9,1,2,'#c8a040'); return; }
+  tWall(sx,sy,nb);
+  R(sx+2,sy+1,12,15,'#4a2e1a'); R(sx+3,sy+2,10,14,ch==='D'?'#a46c3c':'#7c5838');
+  R(sx+4,sy+3,8,5,ch==='D'?'#8c5a30':'#6a4a2e'); R(sx+4,sy+9,8,6,ch==='D'?'#8c5a30':'#6a4a2e');
+  R(sx+3,sy+2,10,1,ch==='D'?'#c08850':'#8c6a48');
+  R(sx+10,sy+9,2,2,'#f2c230');
+  if(ch==='d'){ R(sx+2,sy+7,12,2,'#5a3a22'); R(sx+2,sy+11,12,1,'#5a3a22'); }
+}
+function tFacade(sx,sy,tx,ty,nb){
+  const ground=nb(0,1)!=='Z', h=hsh(tx,ty,5);
+  R(sx,sy,T,T,'#5a7494'); R(sx,sy,1,T,'#43597a'); R(sx+8,sy,1,T,'#4c6686');
+  if(ground){
+    R(sx,sy,T,6,'#5a7494'); R(sx+2,sy+1,5,4,'#9ac6ea'); R(sx+10,sy+1,5,4,'#9ac6ea');
+    R(sx,sy+7,T,2,'#c04848'); R(sx,sy+9,T,1,'#8a2e2e');
+    R(sx+1,sy+10,14,6,'#7fb0d8'); R(sx+1,sy+10,14,1,'#2e3e52'); R(sx+2,sy+11,2,4,'#b6daf2');
+  } else {
+    for(const [x,y] of [[2,2],[10,2],[2,9],[10,9]]){
+      const lit=((h>>(x+y))&7)===0;
+      R(sx+x,sy+y,5,5,lit?'#f6e6a0':'#9ac6ea'); R(sx+x,sy+y,5,1,lit?'#fff6c8':'#cbe6f8'); R(sx+x+4,sy+y+1,1,4,'#6c8aaa');
+    }
+  }
+  if(nb(-1,0)!=='Z'&&!'Dd'.includes(nb(-1,0))) R(sx,sy,2,T,'#2e3e52');
+  if(nb(1,0)!=='Z'&&!'Dd'.includes(nb(1,0))) R(sx+14,sy,2,T,'#2e3e52');
+}
+function tStone(sx,sy,tx,ty,nb,plain){
+  R(sx,sy,T,T,'#5c5070');
+  for(let y=0;y<16;y+=4){ R(sx,sy+y,T,1,'#4a405c'); R(sx+((y>>2)&1)*6+3,sy+y,1,4,'#4a405c'); R(sx+((y>>2)&1)*6+11,sy+y,1,4,'#4a405c'); }
+  if(plain) return;
+  if(nb(0,1)==='%'){
+    R(sx+5,sy+3,6,9,'#241c30'); R(sx+6,sy+2,4,1,'#241c30');
+    const lit=((tx*7+ty*3+(frame>>6))%5)===0;
+    R(sx+6,sy+4,4,7,lit?'#e8e08a':'#3a3050'); R(sx+6,sy+3,4,1,lit?'#e8e08a':'#3a3050');
+  }
+  if(nb(-1,0)!=='%') R(sx,sy,2,T,'#3a3048');
+  if(nb(1,0)!=='%') R(sx+14,sy,2,T,'#3a3048');
+}
+function tPave(sx,sy,tx,ty,nb){
+  R(sx,sy,T,T,'#dcd4c2');
+  R(sx,sy+7,T,1,'#c8bea8'); R(sx,sy+15,T,1,'#c8bea8');
+  R(sx+((ty&1)?3:11),sy,1,7,'#c8bea8'); R(sx+((ty&1)?11:3),sy+8,1,7,'#c8bea8');
+  const h=hsh(tx,ty,6); if(h%4===0) R(sx+2+h%11,sy+2+(h>>4)%11,1,1,'#bcb29a');
+  const P=c=>c==='q'||ROADISH.includes(c)||c==='D'||c==='d'||c==='U'||c==='l'||c==='e';
+  if(!P(nb(0,-1))) R(sx,sy,T,1,'#b4aa92');
+  if(!P(nb(0,1))) R(sx,sy+15,T,1,'#b4aa92');
+  if(!P(nb(-1,0))) R(sx,sy,1,T,'#b4aa92');
+  if(!P(nb(1,0))) R(sx+15,sy,1,T,'#b4aa92');
+}
+function tAsphalt(sx,sy,tx,ty,nb){
+  R(sx,sy,T,T,'#5c5e68');
+  const h=hsh(tx,ty,7);
+  R(sx+h%14,sy+(h>>4)%14,1,1,'#6c6e78'); R(sx+(h>>8)%14,sy+(h>>12)%14,1,1,'#4e5058'); R(sx+(h>>16)%14,sy+(h>>20)%14,2,1,'#64666f');
+  const road=c=>ROADISH.includes(c);
+  if(!road(nb(0,-1))){ R(sx,sy,T,2,'#9a9aa2'); R(sx,sy+2,T,1,'#46484f'); }
+  if(!road(nb(0,1))){ R(sx,sy+14,T,2,'#9a9aa2'); R(sx,sy+13,T,1,'#46484f'); }
+  if(!road(nb(-1,0))){ R(sx,sy,2,T,'#9a9aa2'); R(sx+2,sy,1,T,'#46484f'); }
+  if(!road(nb(1,0))){ R(sx+14,sy,2,T,'#9a9aa2'); R(sx+13,sy,1,T,'#46484f'); }
+}
+function tCrosswalk(sx,sy,tx,ty,nb){
+  tAsphalt(sx,sy,tx,ty,nb);
+  const road=c=>ROADISH.includes(c);
+  const r2=c=>c!=='x'&&road(c);
+  if(r2(nb(-1,0))+r2(nb(1,0))>=r2(nb(0,-1))+r2(nb(0,1))){ R(sx+1,sy+2,14,4,'#ecece4'); R(sx+1,sy+10,14,4,'#ecece4'); }
+  else { R(sx+2,sy+1,4,14,'#ecece4'); R(sx+10,sy+1,4,14,'#ecece4'); }
+}
+function tCar(sx,sy,tx,ty,nb){
+  tAsphalt(sx,sy,tx,ty,nb);
+  const col=['#d8402f','#3a6ad0','#f2c230','#f4f4f4','#3aa060'][hsh(tx,ty,8)%5];
+  R(sx+1,sy+12,14,2,'rgba(0,0,0,.25)');
+  R(sx+1,sy+5,14,7,'#1d1626'); R(sx+2,sy+6,12,5,col); R(sx+4,sy+3,8,3,'#1d1626'); R(sx+5,sy+4,6,2,'#9fd2f2');
+  R(sx+2,sy+6,12,1,shadeCol(col,.3)); R(sx+2,sy+10,12,1,shadeCol(col,-.25));
+  R(sx+2,sy+11,3,3,'#1a1a20'); R(sx+11,sy+11,3,3,'#1a1a20'); R(sx+3,sy+12,1,1,'#888'); R(sx+12,sy+12,1,1,'#888');
+  R(sx+14,sy+7,1,2,'#fff2a0'); R(sx+1,sy+7,1,2,'#e05050');
+}
+function tPlank(sx,sy,tx,ty,nb){
+  const W_=c=>c==='~';
+  if([nb(0,-1),nb(0,1),nb(-1,0),nb(1,0)].some(W_)) tWater(sx,sy,tx,ty,nb); else R(sx,sy,T,T,'#d8c08a');
+  const vert=(nb(0,-1)==='k'||nb(0,1)==='k')&&!(nb(-1,0)==='k'&&nb(1,0)==='k');
+  R(sx,sy,T,T,'#b8874e');
+  if(vert) for(let y=0;y<16;y+=4){ R(sx,sy+y+3,T,1,'#8a6032'); R(sx,sy+y,T,1,'#cc9e62'); }
+  else for(let x=0;x<16;x+=4){ R(sx+x+3,sy,1,T,'#8a6032'); R(sx+x,sy,1,T,'#cc9e62'); }
+  const nail=(x,y)=>R(sx+x,sy+y,1,1,'#5a3a1e');
+  nail(2,1); nail(13,1); nail(2,9); nail(13,9);
+  if(W_(nb(-1,0))){ R(sx,sy,2,T,'#6a4424'); R(sx,sy+2,2,2,'#4a2e16'); R(sx,sy+10,2,2,'#4a2e16'); }
+  if(W_(nb(1,0))){ R(sx+14,sy,2,T,'#6a4424'); R(sx+14,sy+2,2,2,'#4a2e16'); R(sx+14,sy+10,2,2,'#4a2e16'); }
+  if(W_(nb(0,-1))) R(sx,sy,T,2,'#6a4424');
+  if(W_(nb(0,1))){ R(sx,sy+14,T,2,'#6a4424'); R(sx+1,sy+15,2,1,'#4a2e16'); R(sx+13,sy+15,2,1,'#4a2e16'); }
+}
+function tShip(sx,sy,tx,ty,map,nb){
+  tWater(sx,sy,tx,ty,nb);
+  const S=c=>c==='Y', up=S(nb(0,-1)), dn=S(nb(0,1)), lf=S(nb(-1,0)), rt=S(nb(1,0));
+  let col=0; while(tileAt(map,tx-col-1,ty)==='Y') col++;
+  const navy='#26324e', white='#f4f2ec', grey='#c8ccd4', red='#c43c2e';
+  const l=lf?0:2, r=rt?16:(dn?13:11);
+  if(!up){
+    R(sx+l,sy+8,r-l,8,white); R(sx+l,sy+8,r-l,1,navy); R(sx+l,sy+12,r-l,1,grey);
+    for(let x=l+1;x<r;x+=4) R(sx+x,sy+5,1,3,navy); R(sx+l,sy+5,r-l,1,navy);
+    if(lf&&rt&&col%3===1){ R(sx+2,sy+1,12,7,'#e8e4da'); R(sx+2,sy+1,12,1,navy); R(sx+4,sy+3,3,3,'#7fb2da'); R(sx+9,sy+3,3,3,'#7fb2da'); }
+    if(lf&&rt&&col===4){ R(sx+5,sy,6,7,red); R(sx+5,sy,6,2,'#1d1626'); R(sx+6,sy+2,1,4,'#e06a5a'); }
+  } else if(!dn){
+    R(sx+l,sy,r-l,6,white); R(sx+l,sy+6,r-l,4,red); R(sx+l+1,sy+10,r-l-2,2,red); R(sx+l,sy+6,r-l,1,'#8a2a20');
+  } else {
+    R(sx+l,sy,r-l,T,white); R(sx+l,sy+5,r-l,2,navy);
+    if(col%2===0&&lf&&rt){ R(sx+6,sy+9,4,4,navy); R(sx+7,sy+10,2,2,'#9fd2f2'); }
+  }
+  if(!lf) R(sx+l,sy+(up?0:5),1,up?T:11,navy);
+  if(!rt) R(sx+r-1,sy+(up?0:5),1,up?T:11,navy);
+}
+function tFountain(sx,sy,tx,ty,nb){
+  const U=c=>c==='U';
+  R(sx,sy,T,T,'#5aa8e6');
+  const ph=(frame>>3)+tx+ty; R(sx+(ph*3)%12+2,sy+5,3,1,'#9ad6fa'); R(sx+(ph*5)%11+2,sy+11,3,1,'#9ad6fa');
+  const rim='#cfc6b4', rd='#a89e88';
+  if(!U(nb(0,-1))){ R(sx,sy,T,4,rim); R(sx,sy+4,T,1,rd); }
+  if(!U(nb(0,1))){ R(sx,sy+12,T,4,rim); R(sx,sy+12,T,1,rd); R(sx,sy+15,T,1,rd); }
+  if(!U(nb(-1,0))){ R(sx,sy,4,T,rim); R(sx+4,sy,1,T,rd); }
+  if(!U(nb(1,0))){ R(sx+12,sy,4,T,rim); R(sx+11,sy,1,T,rd); }
+  if(U(nb(0,-1))&&U(nb(0,1))&&U(nb(-1,0))&&U(nb(1,0))){
+    const b=(frame>>3)%3;
+    R(sx+6,sy+3,4,11,'#c8c0ae'); R(sx+5,sy+11,6,3,'#a89e88');
+    R(sx+7,sy-1+b,2,5,'#e8f8ff'); R(sx+4,sy+2+b,2,2,'#e8f8ff'); R(sx+10,sy+3-b,2,2,'#e8f8ff'); R(sx+3,sy+7,1,2,'#e8f8ff'); R(sx+12,sy+6,1,2,'#e8f8ff');
+  }
+}
+function tFloor(sx,sy,tx,ty){
+  R(sx,sy,T,T,'#dcbc8c');
+  for(let y=0;y<16;y+=4){ R(sx,sy+y+3,T,1,'#c6a474'); R(sx+((ty*4+y)/4*5+tx*7)%15,sy+y,1,3,'#c6a474'); }
+  R(sx+((tx*3+ty*5)%12)+2,sy+1+(ty&1)*8,3,1,'#e6caa0');
+}
+const SHADOW='rgba(20,10,30,.2)';
+
 function drawTile(ch,sx,sy,tx,ty,map){
+  const nb=(dx,dy)=>tileAt(map,tx+dx,ty+dy), th=themeAt(map,ty);
+  const grass=()=>tGrass(sx,sy,tx,ty,th), floor=()=>tFloor(sx,sy,tx,ty), under=()=>tUnder(sx,sy,tx,ty,nb,th);
   const h=(tx*7+ty*13)%5;
-  const grass=()=>{ R(sx,sy,T,T,'#7ec850'); if(h<2){ R(sx+3+h*4,sy+4,1,2,'#62b03c'); R(sx+10-h*3,sy+11,1,2,'#62b03c'); } };
-  const wall=()=>{ R(sx,sy,T,T,'#efe6cf'); R(sx,sy+13,T,3,'#cfc3a4'); R(sx,sy,T,1,'#b8ab8a'); };
-  const floor=()=>{ R(sx,sy,T,T,'#dcc091'); R(sx,sy+7,T,1,'#c9ab7a'); R(sx,sy+15,T,1,'#c9ab7a'); R(sx+((ty%2)?4:11),sy,1,7,'#c9ab7a'); R(sx+((ty%2)?11:4),sy+8,1,7,'#c9ab7a'); };
-  const roof=(c,d)=>{ R(sx,sy,T,T,c); R(sx,sy+5,T,1,d); R(sx,sy+11,T,1,d); if(!'rbgov'.includes(tileAt(map,tx,ty+1))) R(sx,sy+13,T,3,d); if(!'rbgov'.includes(tileAt(map,tx,ty-1))) R(sx,sy,T,2,'#ffffff55'); };
   switch(ch){
     case '.': grass(); break;
-    case ',': R(sx,sy,T,T,'#e6d3a0'); if(h===0) R(sx+5,sy+6,2,1,'#cdb980'); if(h===3) R(sx+10,sy+11,2,1,'#cdb980'); break;
-    case '#': grass(); R(sx+6,sy+11,4,5,'#6b4a2b'); R(sx+1,sy+2,14,10,'#2f6b3a'); R(sx+3,sy,10,13,'#2f6b3a'); R(sx+3,sy+2,10,8,'#3f8f4a'); R(sx+4,sy+3,4,2,'#62b866'); break;
-    case ':': R(sx,sy,T,T,'#5fae45'); for(let i=0;i<4;i++){ R(sx+1+i*4,sy+3+(i+tx)%2*2,2,11,'#3d8a34'); R(sx+3+i*4,sy+8,1,6,'#93d86e'); } break;
-    case '~': { R(sx,sy,T,T,'#4f9be0'); const o=(tx*5+ty*3+Math.floor(frame/24))%12; R(sx+o,sy+4,4,1,'#a8d8f8'); R(sx+(o+7)%12,sy+11,4,1,'#a8d8f8'); break; }
-    case 'f': grass(); R(sx+3,sy+4,2,2,'#f25a5a'); R(sx+4,sy+6,1,2,'#3d8a34'); R(sx+10,sy+9,2,2,'#fff2a8'); R(sx+11,sy+11,1,2,'#3d8a34'); break;
-    case 'F': grass(); R(sx,sy+6,T,2,'#b98b55'); R(sx,sy+10,T,2,'#b98b55'); R(sx+2,sy+3,3,11,'#8c6239'); R(sx+11,sy+3,3,11,'#8c6239'); break;
-    case 'S': grass(); R(sx+7,sy+9,2,6,'#6b4a2b'); R(sx+2,sy+2,12,8,'#8c6239'); R(sx+3,sy+3,10,6,'#d9b98a'); R(sx+5,sy+5,6,1,'#6b4a2b'); R(sx+5,sy+7,4,1,'#6b4a2b'); break;
-    case 'r': roof('#d8553f','#a83a2a'); break;
-    case 'b': roof('#4a78c8','#35589a'); break;
-    case 'g': roof('#9aa3ad','#727b86'); break;
-    case 'o': roof('#e09a3a','#b07020'); break;
-    case 'v': roof('#8a5ac8','#63409a'); break;
+    case ',': tPath(sx,sy,tx,ty,th,nb); break;
+    case '#': tTree(sx,sy,tx,ty,th,nb); break;
+    case ':': tTall(sx,sy,tx,ty,th); break;
+    case '~': tWater(sx,sy,tx,ty,nb); break;
+    case 'f': tFlowers(sx,sy,tx,ty,th); break;
+    case 'F': under(); R(sx,sy+13,T,2,SHADOW); R(sx,sy+5,T,2,'#c49a62'); R(sx,sy+10,T,2,'#c49a62'); R(sx,sy+7,T,1,'#8c6239'); R(sx,sy+12,T,1,'#8c6239');
+              R(sx+2,sy+3,3,11,'#8c6239'); R(sx+11,sy+3,3,11,'#8c6239'); R(sx+2,sy+3,1,11,'#a87a48'); R(sx+11,sy+3,1,11,'#a87a48'); break;
+    case 'S': under(); R(sx+3,sy+14,10,2,SHADOW); R(sx+7,sy+9,2,6,'#5a3a22');
+              R(sx+1,sy+2,14,8,'#5a3a22'); R(sx+2,sy+3,12,6,'#e2c48e'); R(sx+2,sy+3,12,1,'#f0d6a6'); R(sx+4,sy+5,8,1,'#8a6a42'); R(sx+4,sy+7,6,1,'#8a6a42'); break;
+    case 'r': case 'b': case 'g': case 'o': case 'v': case 't': tRoof(ch,sx,sy,tx,ty,nb); break;
+    case 'W': tWall(sx,sy,nb); break;
+    case 'w': tWall(sx,sy,nb); tWindow(sx,sy); break;
+    case 'D': case 'd': tDoor(ch,sx,sy,nb); break;
+    case 'Z': tFacade(sx,sy,tx,ty,nb); break;
+    case '%': tStone(sx,sy,tx,ty,nb); break;
+    case 'q': tPave(sx,sy,tx,ty,nb); break;
+    case 'a': tAsphalt(sx,sy,tx,ty,nb); break;
+    case 'A': tAsphalt(sx,sy,tx,ty,nb); if(ty%2===0) R(sx+7,sy+2,2,12,'#f0d860'); break;
+    case '=': tAsphalt(sx,sy,tx,ty,nb); if(tx%2===0) R(sx+2,sy+7,12,2,'#ecece4'); break;
+    case 'x': tCrosswalk(sx,sy,tx,ty,nb); break;
+    case 'V': tCar(sx,sy,tx,ty,nb); break;
+    case 'k': tPlank(sx,sy,tx,ty,nb); break;
+    case 'Y': tShip(sx,sy,tx,ty,map,nb); break;
+    case 'U': tFountain(sx,sy,tx,ty,nb); break;
+    case 'y': under(); R(sx+3,sy+14,11,2,SHADOW);
+              R(sx+7,sy+6,3,9,'#9a6a3a'); R(sx+8,sy+5,2,2,'#9a6a3a'); for(let y=7;y<15;y+=3) R(sx+7,sy+y,3,1,'#744a24');
+              R(sx+2,sy+2,12,3,'#2e7e3c'); R(sx,sy+4,5,2,'#2e7e3c'); R(sx+11,sy+4,5,2,'#2e7e3c'); R(sx+1,sy+6,2,2,'#2e7e3c'); R(sx+13,sy+6,2,2,'#2e7e3c');
+              R(sx+4,sy+1,8,2,'#4aa84e'); R(sx+2,sy+3,4,1,'#5cbc5a'); R(sx+10,sy+3,4,1,'#5cbc5a'); R(sx+6,sy,4,1,'#5cbc5a');
+              R(sx+6,sy+5,2,2,'#5a3a1e'); R(sx+9,sy+5,2,2,'#5a3a1e'); break;
+    case 'z': under(); R(sx+4,sy+14,9,2,SHADOW);
+              R(sx+7,sy+4,3,11,'#5a4a44'); R(sx+8,sy+4,1,11,'#706058'); R(sx+6,sy+13,5,2,'#4a3c36');
+              R(sx+3,sy+5,4,1,'#5a4a44'); R(sx+3,sy+2,1,3,'#5a4a44'); R(sx+10,sy+3,4,1,'#5a4a44'); R(sx+13,sy+1,1,2,'#5a4a44');
+              R(sx+8,sy+1,1,3,'#5a4a44'); R(sx+5,sy+8,2,1,'#5a4a44'); R(sx+10,sy+8,3,1,'#5a4a44'); R(sx+12,sy+7,1,1,'#5a4a44'); break;
+    case 'l': under(); R(sx+5,sy+14,6,2,SHADOW);
+              R(sx+7,sy+4,2,11,'#34343e'); R(sx+6,sy+13,4,2,'#2a2a34'); R(sx+5,sy+1,6,4,'#34343e'); R(sx+6,sy+2,4,2,'#fff2a8'); R(sx+7,sy,2,1,'#34343e'); break;
+    case 'n': { under(); const N=c=>c==='n';
+              const x0=N(nb(-1,0))?0:1, x1=N(nb(1,0))?16:15, y0=N(nb(0,-1))?0:2, y1=N(nb(0,1))?16:14;
+              if(!N(nb(0,1))) R(sx+x0,sy+14,x1-x0,2,SHADOW);
+              R(sx+x0,sy+y0,x1-x0,y1-y0,'#1d5430'); R(sx+x0+(x0?1:0),sy+y0+1,x1-x0-(x0?1:0)-(x1<16?1:0),y1-y0-3,'#2c8040');
+              const hh=hsh(tx,ty,9); for(let i=0;i<4;i++) R(sx+2+((hh>>(i*4))%11),sy+y0+2+((hh>>(i*4+2))%(y1-y0-5||1)),2,1,'#48a858');
+              break; }
+    case 'e': under(); R(sx+1,sy+13,14,2,SHADOW); R(sx+1,sy+5,14,2,'#8c5a30'); R(sx+1,sy+5,14,1,'#a87444'); R(sx+1,sy+8,14,3,'#a06a3a'); R(sx+1,sy+8,14,1,'#c08650');
+              R(sx+2,sy+11,2,4,'#3a2a20'); R(sx+12,sy+11,2,4,'#3a2a20'); break;
+    case 'O': under(); R(sx+2,sy+13,12,3,SHADOW);
+              R(sx+2,sy+5,12,9,'#4a4a54'); R(sx+3,sy+4,10,1,'#4a4a54'); R(sx+3,sy+5,10,8,'#8a8a96'); R(sx+4,sy+5,5,3,'#aeaeba'); R(sx+3,sy+11,10,2,'#6a6a76'); R(sx+9,sy+8,2,1,'#6a6a76'); break;
+    case 'I': under(); R(sx+3,sy,1,T,'#2a2028'); R(sx+12,sy,1,T,'#2a2028'); R(sx+4,sy,8,T,'#f4f2ec'); R(sx+4,sy+(ty%2?8:0),8,8,'#d8402f'); R(sx+5,sy,1,T,'rgba(255,255,255,.35)');
+              if(nb(0,1)!=='I'){ R(sx+2,sy+12,12,4,'#4a4a54'); R(sx+3,sy+12,10,3,'#8a8a96'); } break;
+    case 'i': { under(); const on=(frame>>4)%4!==0;
+              R(sx+3,sy+14,10,2,'#2a2028'); R(sx+5,sy+6,6,9,'#2a2028'); R(sx+6,sy+7,4,7,on?'#fff2a0':'#e0a040');
+              R(sx+4,sy+4,8,2,'#d8402f'); R(sx+6,sy+2,4,2,'#d8402f'); R(sx+7,sy+1,2,1,'#2a2028');
+              if(on){ R(sx,sy+9,5,2,'rgba(255,240,160,.5)'); R(sx+11,sy+9,5,2,'rgba(255,240,160,.5)'); }
+              break; }
+    case 'J': { under(); const J=c=>c==='J';
+              if((J(nb(0,-1))||J(nb(0,1)))&&!J(nb(-1,0))&&!J(nb(1,0))){   // a fence running north-south
+                R(sx+9,sy,2,T,SHADOW); R(sx+7,sy,2,T,'#22222c'); R(sx+7,sy+2,2,1,'#55556a'); R(sx+7,sy+10,2,1,'#55556a'); break; }
+              R(sx,sy+13,T,2,SHADOW); R(sx,sy+5,T,1,'#22222c'); R(sx,sy+11,T,1,'#22222c');
+              for(let x=1;x<16;x+=4){ R(sx+x,sy+3,1,11,'#22222c'); R(sx+x,sy+2,1,1,'#55556a'); }
+              if(J(nb(0,1))) R(sx+7,sy+8,2,8,'#22222c');
+              break; }
+    case 'G': under(); R(sx+3,sy+14,10,2,SHADOW);
+              R(sx+4,sy+4,8,11,'#7c7c8c'); R(sx+5,sy+2,6,2,'#7c7c8c'); R(sx+5,sy+3,6,11,'#9a9aaa'); R(sx+6,sy+2,4,1,'#9a9aaa'); R(sx+5,sy+3,1,10,'#b4b4c4');
+              R(sx+7,sy+5,2,6,'#6a6a78'); R(sx+6,sy+6,4,1,'#6a6a78'); R(sx+3,sy+14,10,2,'#5a5a66'); break;
+    case 'R': R(sx,sy,T,T,'#6e6258'); R(sx,sy,T,2,'#8a7c70'); R(sx,sy+13,T,3,'#544a42'); R(sx+3+h,sy+5,5,1,'#544a42'); R(sx+9-h,sy+9,4,1,'#8a7c70'); R(sx+2+h,sy+10,1,2,'#544a42'); break;
+    case 'c': R(sx,sy,T,T,'#9a866c'); if(h<3){ R(sx+3+h*3,sy+5,2,1,'#ac987c'); R(sx+11-h*2,sy+11,2,1,'#82705a'); } break;
+    case 's': R(sx,sy,T,T,'#9a866c'); R(sx+3,sy+13,10,2,'rgba(0,0,0,.2)'); R(sx+4,sy+8,8,7,'#6e6258'); R(sx+5,sy+4,6,5,'#6e6258'); R(sx+7,sy+1,2,4,'#8a7c70'); R(sx+5,sy+5,2,6,'#8a7c70'); R(sx+5,sy+13,6,2,'#544a42'); break;
+    case 'h': R(sx,sy,T,T,'#5a5068'); if(h<3){ R(sx+3+h*3,sy+5,2,1,'#6c627a'); R(sx+11-h*2,sy+11,2,1,'#484056'); } break;
+    case 'E': R(sx,sy,T,T,'#6e6258'); R(sx+1,sy+3,14,13,'#15120f'); R(sx+3,sy+1,10,3,'#15120f'); R(sx,sy,T,1,'#8a7c70'); R(sx+1,sy+3,1,13,'#544a42'); R(sx+14,sy+3,1,13,'#544a42'); break;
     case 'Q': floor(); R(sx+3,sy+12,2,4,'#333'); R(sx+11,sy+12,2,4,'#333'); R(sx+1,sy+5,14,7,'#22222a'); R(sx+2,sy+3,12,3,'#3a3a44'); R(sx+3,sy+6,10,1,(frame>>4)%2?'#f08a20':'#e2553a'); R(sx+7,sy+1,2,2,'#888'); break;
-    case 'P': R(sx,sy,T,T,'#8f8478'); R(sx+2,sy+1,12,9,'#3a3a44'); R(sx+3,sy+2,10,7,(frame>>5)%2?'#7fe0d8':'#58c2b8'); R(sx+1,sy+11,14,4,'#d8dde6'); R(sx+3,sy+12,8,1,'#8a8f98'); break;
-    case 'W': wall(); break;
-    case 'w': wall(); R(sx+3,sy+3,10,8,'#5a4a3a'); R(sx+4,sy+4,8,6,'#9fd4f0'); R(sx+7,sy+4,1,6,'#5a4a3a'); break;
-    case 'D': case 'd': wall(); R(sx+2,sy+1,12,15,'#5a3a22'); R(sx+3,sy+2,10,14,ch==='D'?'#8c5a30':'#74502e'); R(sx+10,sy+9,2,2,'#f2c230'); break;
+    case 'P': R(sx,sy,T,T,'#8f8478'); R(sx+2,sy+1,12,9,'#3a3a44'); R(sx+3,sy+2,10,7,(frame>>5)%2?'#7fe0d8':'#58c2b8'); R(sx+4,sy+3,4,1,'#c8f4f0'); R(sx+1,sy+11,14,4,'#d8dde6'); R(sx+3,sy+12,8,1,'#8a8f98'); break;
     case '_': floor(); break;
-    case 'X': R(sx,sy,T,T,'#8f8478'); R(sx,sy+12,T,4,'#6f655b'); R(sx,sy,T,2,'#aca196'); break;
-    case 'T': floor(); R(sx,sy+2,T,10,'#8c5a30'); R(sx,sy+2,T,2,'#b07a48'); R(sx+1,sy+12,2,4,'#5a3a22'); R(sx+13,sy+12,2,4,'#5a3a22'); break;
-    case 'B': floor(); R(sx+1,sy,14,16,'#3558a8'); R(sx+2,sy+1,12,5,'#ffffff'); R(sx+2,sy+7,12,8,'#5a86d8'); break;
-    case 'C': floor(); R(sx,sy+1,T,13,'#2a7f78'); R(sx,sy+1,T,4,'#58c2b8'); break;
-    case 'K': R(sx,sy,T,T,'#6b4a2b'); R(sx+1,sy+2,14,5,'#3a2a1a'); R(sx+1,sy+9,14,5,'#3a2a1a');
-              ['#d8553f','#4a78c8','#e0a52e','#6aa84f'].forEach((c,i)=>{ R(sx+2+i*3,sy+3,2,4,c); R(sx+3+i*3,sy+10,2,4,c); }); break;
-    case 'M': R(sx,sy,T,T,'#8f8478'); R(sx,sy,T,12,'#c0483a'); R(sx+2,sy+2,12,8,'#e06a5a'); break;
-    case 'H': R(sx,sy,T,T,'#8f8478'); R(sx+1,sy+2,14,13,'#d8dde6'); R(sx+3,sy+4,10,5,'#58c2b8'); R(sx+4,sy+11,2,2,'#e2553a'); R(sx+8,sy+11,2,2,'#6aa84f'); break;
-    case 'p': floor(); R(sx+5,sy+10,6,5,'#b5623a'); R(sx+4,sy+2,8,8,'#3f8f4a'); R(sx+6,sy,4,4,'#62b866'); break;
+    case 'X': if(ty===MAPS[map].rows.length-1||!'_TBCKHpPQhM'.includes(nb(0,1))){ R(sx,sy,T,T,'#7c7268'); R(sx,sy,T,2,'#9a9086'); R(sx,sy+14,T,2,'#625a52'); }
+              else { R(sx,sy,T,T,'#eadfc6'); R(sx+3,sy,2,12,'#ded0b2'); R(sx+11,sy,2,12,'#ded0b2'); R(sx,sy+11,T,5,'#8c6a48'); R(sx,sy+11,T,1,'#a88660'); } break;
+    case 'T': floor(); R(sx,sy+13,T,3,SHADOW); R(sx,sy+2,T,10,'#8c5a30'); R(sx,sy+2,T,2,'#b67e4a'); R(sx,sy+11,T,1,'#6a4222'); R(sx+1,sy+12,2,4,'#5a3a22'); R(sx+13,sy+12,2,4,'#5a3a22'); break;
+    case 'B': floor(); R(sx+1,sy,14,16,'#2c4a8c'); R(sx+2,sy+1,12,5,'#ffffff'); R(sx+2,sy+5,12,1,'#d8dde6'); R(sx+2,sy+7,12,8,'#5a86d8'); R(sx+2,sy+7,12,1,'#7aa4ea'); break;
+    case 'C': floor(); R(sx,sy+1,T,13,'#24726c'); R(sx,sy+1,T,4,'#5ac6bc'); R(sx,sy+5,T,1,'#1c5a54'); break;
+    case 'K': R(sx,sy,T,T,'#6b4a2b'); R(sx,sy,T,1,'#8a6440'); R(sx+1,sy+2,14,5,'#3a2a1a'); R(sx+1,sy+9,14,5,'#3a2a1a');
+              ['#d8553f','#4a78c8','#e0a52e','#6aa84f'].forEach((c,i)=>{ R(sx+2+i*3,sy+3,2,4,c); R(sx+3+i*3,sy+10,2,4,c); R(sx+2+i*3,sy+3,1,4,shadeCol(c,.25)); }); break;
+    case 'M': R(sx,sy,T,T,'#8f8478'); R(sx,sy,T,12,'#a8382e'); R(sx+1,sy+1,14,10,'#d85a4a'); R(sx+3,sy+3,10,6,'#e8786a'); break;
+    case 'H': R(sx,sy,T,T,'#8f8478'); R(sx+1,sy+2,14,13,'#d8dde6'); R(sx+1,sy+2,14,1,'#f4f6fa'); R(sx+3,sy+4,10,5,'#58c2b8'); R(sx+4,sy+11,2,2,'#e2553a'); R(sx+8,sy+11,2,2,'#6aa84f'); break;
+    case 'p': floor(); R(sx+4,sy+13,8,3,SHADOW); R(sx+5,sy+10,6,5,'#b5623a'); R(sx+5,sy+10,6,1,'#d07a4e'); R(sx+4,sy+2,8,8,'#2f7a3e'); R(sx+6,sy,4,4,'#4aa858'); R(sx+5,sy+4,2,2,'#62b866'); break;
     default: R(sx,sy,T,T,'#000');
   }
 }
 
+// ------------------------------ WORLD ---------------------------------
+const LAYER={map:null,c:null};
+const ANIM=new Set('~UfiIOYkQP');   // tiles redrawn every frame
+function mapLayer(id){
+  if(LAYER.map===id&&LAYER.c) return LAYER.c;
+  const m=MAPS[id], w=m.rows[0].length, h=m.rows.length;
+  const c=document.createElement('canvas'); c.width=w*T; c.height=h*T;
+  const keep=ctx; ctx=c.getContext('2d');
+  try{ for(let y=0;y<h;y++) for(let x=0;x<w;x++) drawTile(m.rows[y][x],x*T,y*T,x,y,id); }
+  finally{ ctx=keep; }
+  LAYER.map=id; LAYER.c=c; return c;
+}
+function outlineText(t,x,y,fill,stroke){
+  ctx.fillStyle=stroke||'#1d1626';
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) ctx.fillText(t,x+dx,y+dy);
+  ctx.fillStyle=fill||'#ffffff'; ctx.fillText(t,x,y);
+}
+function panel(x,y,w,h,bg){
+  R(x+1,y,w-2,h,'#2a2438'); R(x,y+1,w,h-2,'#2a2438');
+  R(x+1,y+1,w-2,h-2,bg||'#fbf7ea'); R(x+2,y+h-3,w-4,1,'#e6dec8');
+}
 function drawWorld(){
   const m=MAPS[G.map], mw=m.rows[0].length*T, mh=m.rows.length*T;
   const px=(G.x+(mv?mv.dx*mv.t:0))*T, py=(G.y+(mv?mv.dy*mv.t:0))*T;
   let cx=Math.round(px-7*T), cy=Math.round(py-5*T);
-  cx=mw<=W?-(W-mw)/2:Math.max(0,Math.min(mw-W,cx));
-  cy=mh<=H?-(H-mh)/2:Math.max(0,Math.min(mh-H,cy));
-  cx=Math.round(cx); cy=Math.round(cy);
-  R(0,0,W,H,'#101014');
+  cx=mw<=W?-Math.round((W-mw)/2):Math.max(0,Math.min(mw-W,cx));
+  cy=mh<=H?-Math.round((H-mh)/2):Math.max(0,Math.min(mh-H,cy));
+  R(0,0,W,H,'#14121a');
+  const L=mapLayer(G.map), sx0=Math.max(0,cx), sy0=Math.max(0,cy), dx0=sx0-cx, dy0=sy0-cy;
+  const w=Math.min(mw-sx0,W-dx0), h=Math.min(mh-sy0,H-dy0);
+  if(w>0&&h>0) ctx.drawImage(L,sx0,sy0,w,h,dx0,dy0,w,h);
   const x0=Math.max(0,Math.floor(cx/T)), y0=Math.max(0,Math.floor(cy/T));
-  for(let ty=y0;ty<Math.min(m.rows.length,y0+VH+1);ty++)
-    for(let tx=x0;tx<Math.min(m.rows[0].length,x0+VW+1);tx++)
-      drawTile(m.rows[ty][tx],tx*T-cx,ty*T-cy,tx,ty,G.map);
-  if(MAPS[G.map].outside){
+  for(let ty=y0;ty<Math.min(m.rows.length,y0+VH+2);ty++)
+    for(let tx=x0;tx<Math.min(m.rows[0].length,x0+VW+2);tx++){ const c=m.rows[ty][tx]; if(ANIM.has(c)) drawTile(c,tx*T-cx,ty*T-cy,tx,ty,G.map); }
+  if(m.outside){
     ctx.font='bold 7px ui-monospace,Menlo,Consolas,monospace'; ctx.textAlign='center';
-    for(const l of LABELS){ if(l.map!==G.map) continue; ctx.fillStyle='#ffffff'; ctx.fillText(l.text,(l.x+l.w/2)*T-cx,l.y*T-cy+10); }
+    for(const l of LABELS){ if(l.map!==G.map) continue; outlineText(l.text,(l.x+l.w/2)*T-cx,l.y*T-cy+10); }
     ctx.textAlign='left';
   }
+  const shadow=(x,y)=>{ ctx.globalAlpha=.24; R(x+4,y+11,8,1,'#000'); R(x+3,y+12,10,1,'#000'); R(x+4,y+13,8,1,'#000'); ctx.globalAlpha=1; };
   const list=ENT.filter(e=>e.map===G.map&&visible(e)).map(e=>({y:e.y*T,e}));
   list.push({y:py,player:true});
   list.sort((a,b)=>a.y-b.y);
   for(const it of list){
     if(it.player){
-      const step=mv?(mv.t<.5?1:2):0;
-      drawCarlos(Math.round(px)-cx,Math.round(py)-cy-3,1,LOOKS.player,G.dir,step);
+      const step=mv?(mv.t<.5?1:2):0, x=Math.round(px)-cx, y=Math.round(py)-cy;
+      shadow(x,y); drawCarlos(x,y-3,1,LOOKS.player,G.dir,step);
     } else {
       const e=it.e, sx=e.x*T-cx, sy=e.y*T-cy;
-      if(e.kind==='ball') drawBall(sx+4,sy+2,1);
+      if(e.kind==='ball'){ ctx.globalAlpha=.24; R(sx+5,sy+10,7,2,'#000'); ctx.globalAlpha=1; drawBall(sx+4,sy+2,1); }
       else {
-        drawCarlos(sx,sy-3,1,e.look,e.dir,0);
-        if(e.alert>frame){ R(sx+5,sy-16,6,11,'#ffffff'); R(sx+7,sy-14,2,5,'#d8402f'); R(sx+7,sy-8,2,2,'#d8402f'); }
+        shadow(sx,sy); drawCarlos(sx,sy-3,1,e.look,e.dir,0);
+        if(e.alert>frame){ R(sx+4,sy-17,8,12,'#1d1626'); R(sx+5,sy-16,6,10,'#ffffff'); R(sx+7,sy-15,2,5,'#d8402f'); R(sx+7,sy-9,2,2,'#d8402f'); R(sx+6,sy-6,3,2,'#1d1626'); }
       }
     }
   }
+  if(m.fogY){
+    ctx.globalAlpha=.13;
+    for(let k=0;k<10;k++){
+      const wx=Math.round(((k*173+frame*(.12+(k%3)*.05))%(mw+120))-60-cx), wy=Math.round((k*97)%(m.fogY*T-30))+10-cy;
+      R(wx,wy,46,6,'#eef2f8'); R(wx+6,wy-3,30,3,'#eef2f8'); R(wx+4,wy+6,36,3,'#eef2f8');
+    }
+    ctx.globalAlpha=1;
+  }
+  if(m.dark){
+    const gx=Math.round(px)-cx+8, gy=Math.round(py)-cy+6;
+    const gr=ctx.createRadialGradient(gx,gy,38,gx,gy,150);
+    gr.addColorStop(0,'rgba(8,6,10,0)'); gr.addColorStop(1,'rgba(8,6,10,.74)');
+    ctx.fillStyle=gr; ctx.fillRect(0,0,W,H);
+  }
   if(banner.t>0&&!ui.text){
-    ctx.font=FONT; const w=ctx.measureText(banner.text).width+12;
-    R(4,4,w,16,'#20202a'); R(5,5,w-2,14,'#f8f4e4'); ctx.fillStyle='#20202a'; ctx.fillText(banner.text,10,15);
+    ctx.font=FONT; const w=ctx.measureText(banner.text).width+14;
+    panel(4,4,w,17); R(6,6,3,13,'#e2553a'); ctx.fillStyle='#2a2438'; ctx.fillText(banner.text,12,16);
   }
 }
 
+// ------------------------------ BATTLE --------------------------------
+function pxEllipse(cx,cy,rx,ry,c){ for(let dy=-ry;dy<=ry;dy++){ const hw=Math.round(rx*Math.sqrt(1-(dy/ry)*(dy/ry))); R(cx-hw,cy+dy,hw*2,1,c); } }
+const BENV={
+  field: {sky:['#9ed6f2','#bce4f6','#d8f0fa'],hills:['#9ad282','#84c26e'],ground:'#d4ecb0',pl:['#8ccc62','#5f9e44','#b0de86']},
+  beach: {sky:['#9ed6f2','#bce4f6','#d8f0fa'],sea:true,ground:'#f2e4b6',pl:['#e2cc8c','#b89c60','#f4e6b4']},
+  dusk:  {sky:['#3e3260','#5a4474','#7a5a84'],hills:['#34463e','#2a3a34'],ground:'#6a8a76',pl:['#4c7060','#34503e','#6a9078'],stars:true},
+  city:  {sky:['#a8d0ec','#c4e0f2','#ddeef8'],skyline:true,ground:'#d6d0c2',pl:['#b8b2a4','#8e887a','#d2ccbe']},
+  cave:  {sky:['#221c18','#2a221e','#322822'],cave:true,ground:'#5a5048',pl:['#7a6e62','#544a40','#8e8274']},
+  indoor:{sky:['#e6dac0','#e6dac0','#dacaa8'],wall:true,ground:'#caa878',pl:['#b8865a','#8e603a','#d0a070']},
+};
+function battleEnv(){
+  const m=MAPS[G.map]; if(m.dark) return 'cave'; if(!m.outside) return 'indoor';
+  if(/GRAN CARLOS|CARLOS CENTRAL|CARLOS CITY|ROUTE 8/.test(areaName())) return 'city';
+  const t=typeof m.theme==='function'?m.theme(G.y):m.theme;
+  return t==='sand'?'beach':t==='gloom'?'dusk':'field';
+}
 function hpBar(x,y,w,cur,max){
-  const f=Math.max(0,Math.min(1,cur/max));
-  R(x,y,w,5,'#20202a'); R(x+1,y+1,w-2,3,'#585868');
-  R(x+1,y+1,Math.round((w-2)*f),3,f>.5?'#4ec24a':f>.2?'#e8c020':'#e04a3a');
+  const f=Math.max(0,Math.min(1,cur/max)), fw=Math.round((w-2)*f), c=f>.5?'#48c048':f>.2?'#e8c020':'#e04a3a';
+  R(x,y,w,5,'#2a2438'); R(x+1,y+1,w-2,3,'#585468');
+  R(x+1,y+1,fw,3,c); R(x+1,y+1,fw,1,shadeCol(c,.35));
 }
 function infoBox(x,y,m,shown,mine){
-  R(x,y,108,mine?34:26,'#20202a'); R(x+1,y+1,106,mine?32:24,'#f8f4e4');
-  ctx.font=FONT; ctx.fillStyle='#20202a';
+  const hgt=mine?34:26;
+  ctx.globalAlpha=.25; R(x+2,y+2,116,hgt,'#000'); ctx.globalAlpha=1;
+  panel(x,y,116,hgt);
+  ctx.font=FONT; ctx.fillStyle='#2a2438';
   ctx.fillText(nm(m),x+5,y+11);
-  ctx.textAlign='right'; ctx.fillText('L'+m.lvl,x+103,y+11); ctx.textAlign='left';
-  R(x+5,y+15,22,6,TYPES[SPECIES[m.sp].type].color);
-  hpBar(x+30,y+15,73,shown,stat(m,'hp'));
+  ctx.textAlign='right'; ctx.fillText('L'+m.lvl,x+111,y+11); ctx.textAlign='left';
+  const tc=TYPES[SPECIES[m.sp].type].color;
+  R(x+5,y+15,22,6,'#2a2438'); R(x+6,y+16,20,4,tc); R(x+6,y+16,20,1,shadeCol(tc,.35));
+  hpBar(x+30,y+15,81,shown,stat(m,'hp'));
   if(mine){
-    ctx.fillText(Math.ceil(shown)+'/'+stat(m,'hp'),x+5,y+30);
+    ctx.fillStyle='#2a2438'; ctx.fillText(Math.ceil(shown)+'/'+stat(m,'hp'),x+5,y+30);
     const a=m.lvl**3, b=(m.lvl+1)**3;
-    R(x+52,y+26,51,3,'#b8b4a4'); R(x+52,y+26,Math.round(51*Math.min(1,(m.exp-a)/(b-a))),3,'#4a8fd8');
+    R(x+52,y+26,59,4,'#2a2438'); R(x+53,y+27,57,2,'#c8c2b0'); R(x+53,y+27,Math.round(57*Math.min(1,(m.exp-a)/(b-a))),2,'#4a8fd8');
   }
 }
 function drawBattle(){
-  R(0,0,W,H,'#eef0e0'); R(0,0,W,40,'#d6ecf5'); R(0,40,W,2,'#c2dbe4');
-  ctx.fillStyle='#b9d49a';
-  ctx.beginPath(); ctx.ellipse(182,66,42,10,0,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(56,124,54,11,0,0,Math.PI*2); ctx.fill();
+  const e=BENV[battleEnv()];
+  R(0,0,W,18,e.sky[0]); R(0,18,W,14,e.sky[1]); R(0,32,W,20,e.sky[2]);
+  if(e.stars) for(let i=0;i<16;i++) R((i*53)%W,(i*29)%30+2,1,1,(frame>>4)%5===i%5?'#ffffff':'#c8b8e8');
+  if(e.hills){ pxEllipse(40,54,70,14,e.hills[0]); pxEllipse(200,56,80,16,e.hills[1]); pxEllipse(120,58,60,10,e.hills[0]); }
+  if(e.sea){ R(0,40,W,12,'#5aaee8'); R(0,40,W,1,'#9ad6fa'); R((frame>>2)%W,44,20,1,'#9ad6fa'); R((frame>>2)%W-120,47,26,1,'#9ad6fa'); R(0,51,W,1,'#ffffff'); }
+  if(e.skyline) for(let i=0;i<12;i++){ const x=i*21-6, h=14+(i*17)%24; R(x,52-h,17,h,'#9eacc4'); for(let wy=52-h+3;wy<50;wy+=5) for(let wx=x+3;wx<x+15;wx+=5) R(wx,wy,2,2,'#c8d6e8'); }
+  if(e.cave){ for(let i=0;i<14;i++){ const x=i*18+(i*7)%9, hh=8+(i*13)%16; R(x,0,7,hh,'#16120e'); R(x+2,hh,3,4,'#16120e'); } }
+  if(e.wall){ R(0,0,W,52,'#e6dac0'); for(let x=4;x<W;x+=16) R(x,0,3,48,'#dacaa8'); R(0,46,W,6,'#8c6a48'); }
+  R(0,52,W,H-52,e.ground); for(let y=58;y<H;y+=9) R(0,y,W,1,shadeCol(e.ground,-.06));
+  // at the start of a battle both sides slide in: the foe from the left, you from the right
+  const sl=B.slide===undefined?1:B.slide, oF=Math.round(-(1-sl)*250), oM=Math.round((1-sl)*250);
+  const tF=Math.round((B.tOff?B.tOff.foe:0)*140), tM=Math.round((B.tOff?B.tOff.me:0)*140);
+  pxEllipse(182+oF,71,46,11,e.pl[1]); pxEllipse(182+oF,68,46,10,e.pl[0]); pxEllipse(174+oF,66,28,5,e.pl[2]);
+  pxEllipse(56+oM,127,58,13,e.pl[1]); pxEllipse(56+oM,124,58,12,e.pl[0]); pxEllipse(46+oM,121,34,6,e.pl[2]);
   const blink=who=>B.hit[who]>frame&&(frame>>2)%2;
-  if(B.showFoe&&!blink('foe')) drawCarlos(158,18,3,SPECIES[B.foe.sp].look,'down',0);
+  if(B.trainerFoe) drawCarlos(158+oF+tF,18,3,B.trainerFoe,'down',0);
+  else if(B.showFoe&&!blink('foe')) drawCarlos(158+oF,18,3,SPECIES[B.foe.sp].look,'down',0);
   if(B.ball) drawBall(170+(B.ball.shake?Math.round(Math.sin(frame*.6)*3):0),44,3);
-  if(B.showMe&&!blink('me')) drawCarlos(24,60,4,SPECIES[B.me.sp].look,'down',0,true);
-  if(B.showFoe||B.ball) infoBox(8,10,B.foe,B.hpS.foe,false);
-  if(B.showMe) infoBox(124,74,B.me,B.hpS.me,true);
+  if(B.trainerMe) drawCarlos(24+oM-tM,60,4,LOOKS.player,'up',0);
+  else if(B.showMe&&!blink('me')) drawCarlos(24+oM,60,4,SPECIES[B.me.sp].look,'down',0,true);
+  if(sl<1) return;
+  if((B.showFoe&&!B.trainerFoe)||B.ball) infoBox(8,10,B.foe,B.hpS.foe,false);
+  if(B.showMe&&!B.trainerMe) infoBox(120,74,B.me,B.hpS.me,true);
 }
+
+// ------------------------------ SCREENS --------------------------------
 function drawTitle(){
-  R(0,0,W,H,'#2a2440');
-  for(let i=0;i<24;i++) R((i*37+frame/4)%W,(i*53)%110,1,1,'#ffffff');
+  const bands=['#16122e','#1e1840','#2a2052','#382a62','#4a3670'];
+  bands.forEach((c,i)=>R(0,i*22,W,22,c));
+  for(let i=0;i<30;i++){ const tw=((frame>>4)+i)%7===0; R((i*37+(frame>>3))%W,(i*53)%96,1,1,tw?'#ffffff':'#9a8ec8'); }
+  pxEllipse(40,176,120,30,'#2a2048'); pxEllipse(210,178,110,32,'#241c40'); R(0,168,W,H-168,'#1c1636');
   ctx.textAlign='center';
   ctx.font='bold 34px ui-monospace,Menlo,Consolas,monospace';
-  ctx.fillStyle='#15151a'; ctx.fillText('CARLOS',W/2+2,50);
-  ctx.fillStyle='#f2c230'; ctx.fillText('CARLOS',W/2,48);
+  ctx.fillStyle='#1d1626'; for(const [dx,dy] of [[2,0],[-2,0],[0,2],[0,-2],[2,2],[-2,2],[2,-2],[-2,-2],[0,4],[2,4],[-2,4]]) ctx.fillText('CARLOS',W/2+dx,48+dy);
+  ctx.fillStyle='#e0a020'; ctx.fillText('CARLOS',W/2,49);
+  ctx.fillStyle='#f6cc3a'; ctx.fillText('CARLOS',W/2,47);
   ctx.font='bold 10px ui-monospace,Menlo,Consolas,monospace';
-  ctx.fillStyle='#ffffff'; ctx.fillText('C A R L O S   V E R S I O N',W/2,64);
+  outlineText('C A R L O S   V E R S I O N',W/2,64,'#ffffff');
   ctx.textAlign='left';
+  for(const [x,y] of [[40,76],[96,72],[152,76]]) pxEllipse(x+24,y+46,18,3,'rgba(10,6,20,.55)');
   drawCarlos(40,76,3,SPECIES.gym.look,'down',0);
   drawCarlos(96,72+Math.round(Math.sin(frame/20)*2),3,LOOKS.player,'down',0);
   drawCarlos(152,76,3,SPECIES.nap.look,'down',0,true);
   if(!ui.menus.length&&(frame>>5)%2){
-    ctx.font=FONT; ctx.textAlign='center'; ctx.fillStyle='#ffffff';
-    ctx.fillText('PRESS  A  (Z / SPACE)  TO START',W/2,150); ctx.textAlign='left';
+    ctx.font=FONT; ctx.textAlign='center';
+    outlineText('PRESS  A  (Z / SPACE)  TO START',W/2,150,'#ffffff'); ctx.textAlign='left';
   }
-  ctx.font='7px ui-monospace,Menlo,Consolas,monospace'; ctx.fillStyle='#8a84a8'; ctx.textAlign='center';
-  ctx.fillText('Gotta Carlos them all.',W/2,168); ctx.textAlign='left';
+  ctx.font='7px ui-monospace,Menlo,Consolas,monospace'; ctx.fillStyle='#9a90c0'; ctx.textAlign='center';
+  ctx.fillText('Gotta Carlos them all.  8 badges. 70 Carloses.',W/2,168); ctx.textAlign='left';
 }
-function drawBox(x,y,w,h){ R(x,y,w,h,'#20202a'); R(x+1,y+1,w-2,h-2,'#f8f4e4'); R(x+3,y+3,w-6,h-6,'#20202a'); R(x+4,y+4,w-8,h-8,'#f8f4e4'); }
+function drawBox(x,y,w,h){
+  panel(x,y,w,h);
+  R(x+3,y+3,w-6,1,'#9fb4d8'); R(x+3,y+h-4,w-6,1,'#9fb4d8'); R(x+3,y+3,1,h-6,'#9fb4d8'); R(x+w-4,y+3,1,h-6,'#9fb4d8');
+}
 function drawUI(){
   const t=ui.text;
   if(t){
     drawBox(0,128,W,48);
-    ctx.font=FONT; ctx.fillStyle='#20202a';
+    ctx.font=FONT; ctx.fillStyle='#2a2438';
     let left=Math.floor(t.n);
     const lines=t.pages[t.page];
     lines.forEach((ln,i)=>{ const s=ln.slice(0,Math.max(0,left)); left-=ln.length; ctx.fillText(s,10,143+i*12); });
     if(t.wait&&t.n>=lines.join('').length&&(frame>>4)%2){
-      ctx.beginPath(); ctx.moveTo(224,166); ctx.lineTo(232,166); ctx.lineTo(228,171); ctx.fill();
+      ctx.fillStyle='#e2553a'; ctx.beginPath(); ctx.moveTo(224,165); ctx.lineTo(232,165); ctx.lineTo(228,170); ctx.fill();
     }
   }
   for(const mn of ui.menus){
     const h=mn.opts.length*12+12;
     const x=mn.x!==undefined?mn.x:W-mn.w-2, y=mn.y!==undefined?mn.y:(scene==='battle'?174:t?126:174)-h;
     drawBox(x,y,mn.w,h);
-    ctx.font=FONT; ctx.fillStyle='#20202a';
+    ctx.font=FONT;
     mn.opts.forEach((o,i)=>{
-      ctx.fillText(o,x+15,y+16+i*12);
-      if(i===mn.sel){ ctx.beginPath(); ctx.moveTo(x+7,y+9+i*12); ctx.lineTo(x+12,y+12.5+i*12); ctx.lineTo(x+7,y+16+i*12); ctx.fill(); }
+      if(i===mn.sel){ R(x+5,y+7+i*12,mn.w-10,11,'#e8eef8'); }
+      ctx.fillStyle='#2a2438'; ctx.fillText(o,x+15,y+16+i*12);
+      if(i===mn.sel){ ctx.fillStyle='#e2553a'; ctx.beginPath(); ctx.moveTo(x+7,y+9+i*12); ctx.lineTo(x+12,y+12.5+i*12); ctx.lineTo(x+7,y+16+i*12); ctx.fill(); }
     });
   }
 }
+
+// ------------------------- BATTLE TRANSITIONS --------------------------
+// Flashes, then the screen closes in: stripes for wild Carloses, a spiral for trainers,
+// a shrinking circle for leaders and legends.
+let SPIRAL=null;
+function spiralOrder(w,h){
+  const out=[]; let x0=0,y0=0,x1=w-1,y1=h-1;
+  while(x0<=x1&&y0<=y1){
+    for(let x=x0;x<=x1;x++) out.push([x,y0]);
+    for(let y=y0+1;y<=y1;y++) out.push([x1,y]);
+    if(y0<y1) for(let x=x1-1;x>=x0;x--) out.push([x,y1]);
+    if(x0<x1) for(let y=y1-1;y>y0;y--) out.push([x0,y]);
+    x0++; y0++; x1--; y1--;
+  }
+  return out;
+}
+function drawWipe(){
+  if(fx.flash){ ctx.globalAlpha=.72; R(0,0,W,H,fx.flash); ctx.globalAlpha=1; }
+  const w=fx.wipe; if(!w) return;
+  const p=Math.min(1,w.p), K='#08060c';
+  if(w.type==='bars'){
+    const n=8, bh=H/n;
+    for(let i=0;i<n;i++){ const bw=Math.round(W*Math.min(1,p*1.15-(i%4)*.05)); if(bw<=0) continue;
+      const y=Math.round(i*bh), hh=Math.round((i+1)*bh)-y;
+      if(i%2) R(W-bw,y,bw,hh,K); else R(0,y,bw,hh,K); }
+  } else if(w.type==='spiral'){
+    if(!SPIRAL) SPIRAL=spiralOrder(15,11);
+    const n=Math.floor(p*SPIRAL.length);
+    for(let i=0;i<n;i++){ const [x,y]=SPIRAL[i]; R(x*16,y*16,16,16,K); }
+  } else {
+    const r=Math.max(0,Math.round((1-p)*150/4)*4), cx=W/2, cy=H/2;
+    for(let y=0;y<H;y+=4){ const dy=y+2-cy, hw=r>Math.abs(dy)?Math.round(Math.sqrt(r*r-dy*dy)/4)*4:0;
+      R(0,y,cx-hw,4,K); R(cx+hw,y,W-cx-hw,4,K); }
+  }
+}
+
 function render(){
   ctx.setTransform(SCALE,0,0,SCALE,0,0);
   ctx.imageSmoothingEnabled=false; ctx.textBaseline='alphabetic'; ctx.textAlign='left';
@@ -1190,12 +1943,1216 @@ function render(){
   else if(scene==='battle'&&B) drawBattle();
   else drawWorld();
   drawUI();
+  drawWipe();
   if(fx.a>0){ ctx.globalAlpha=Math.min(1,fx.a); R(0,0,W,H,'#000'); ctx.globalAlpha=1; }
 }
 
+/* =====================================================================
+   EXPANSION: badges 3-8, Team Karl, and the Carlos League
+   ===================================================================== */
+Object.assign(MOVES,{
+  'Burpee Blast':{type:'HYPE',power:80,acc:90}, 'Personal Best':{type:'HYPE',power:95,acc:85},
+  'Second Dinner':{type:'SNACK',power:80,acc:90}, 'Food Truck':{type:'SNACK',power:95,acc:85},
+  'Sunday Nap':{type:'CHILL',power:80,acc:90}, 'Total Zen':{type:'CHILL',power:95,acc:85},
+  'Small Talk':{type:'REGULAR',power:75,acc:95,flavor:'"Crazy weather, huh?"'}, 'Reply All':{type:'REGULAR',power:90,acc:85,flavor:'The whole company saw it.'},
+  'Abduction':{type:'WEIRD',power:85,acc:90}, 'Interpretive Dance':{type:'WEIRD',power:95,acc:85},
+  'Boo':{type:'SPOOKY',power:40,acc:100}, 'Cold Hands':{type:'SPOOKY',power:55,acc:100}, 'Creaky Door':{type:'SPOOKY',power:65,acc:95},
+  'Jump Scare':{type:'SPOOKY',power:80,acc:90}, 'Midnight Knock':{type:'SPOOKY',power:95,acc:85},
+  'Ghost Story':{type:'SPOOKY',kind:'defDown',acc:100,flavor:'"...and the call was coming from INSIDE the house."'},
+  'Um Actually':{type:'NERD',power:40,acc:100,flavor:'"Um, actually..."'}, 'Spreadsheet':{type:'NERD',power:55,acc:100}, 'Pop Quiz':{type:'NERD',power:65,acc:95},
+  'Checkmate':{type:'NERD',power:80,acc:90}, 'Blue Screen':{type:'NERD',power:95,acc:85},
+  'Fun Fact':{type:'NERD',kind:'atkDown',acc:100,flavor:'It was not fun. It was barely a fact.'},
+  'Tech Support':{type:'NERD',kind:'heal',acc:100},
+  'Pinky Up':{type:'FANCY',power:40,acc:100}, 'Name Drop':{type:'FANCY',power:55,acc:100}, 'Valet Slam':{type:'FANCY',power:65,acc:95},
+  'Black Card':{type:'FANCY',power:80,acc:90}, 'Champagne Pop':{type:'FANCY',power:95,acc:85},
+  'Snub':{type:'FANCY',kind:'atkDown',acc:100,flavor:'"Oh. You are still here."'},
+  'Room Service':{type:'FANCY',kind:'heal',acc:100},
+});
+// Each type's attacks from weakest to strongest. Every Carlos learns tier 4 at L26 and tier 5 at L40.
+const TIERS={
+  HYPE:['Flex','Leg Day','Protein Punch','Burpee Blast','Personal Best'],
+  SNACK:['Chip Toss','Crumb Storm','All You Can Eat','Second Dinner','Food Truck'],
+  CHILL:['Yawn','Five More Minutes','Namaste Slam','Sunday Nap','Total Zen'],
+  REGULAR:['Finger Guns','Lawn Mower','Photo Bomb','Small Talk','Reply All'],
+  WEIRD:['Grunt','Club Bonk','Discover Fire','Abduction','Interpretive Dance'],
+  SPOOKY:['Boo','Cold Hands','Creaky Door','Jump Scare','Midnight Knock'],
+  NERD:['Um Actually','Spreadsheet','Pop Quiz','Checkmate','Blue Screen'],
+  FANCY:['Pinky Up','Name Drop','Valet Slam','Black Card','Champagne Pop'],
+};
+function learnset(id){
+  const s=SPECIES[id], t=TIERS[s.type];
+  const extra=[[26,t[3]],[40,t[4]]].filter(([l,n])=>!s.moves.some(x=>x[1]===n));
+  return s.moves.concat(extra).sort((a,b)=>a[0]-b[0]);
+}
+
+// ---- extra drawing bits for the new Carloses
+const face=f=>(p,d,c)=>{ if(d!=='up') f(p,d,c); };
+const hand=f=>(p,d,c)=>{ if(d==='down') f(p,d,c); };
+const all=(...fs)=>(p,d,c)=>fs.forEach(f=>f(p,d,c));
+const FX={
+  sheet:col=>(p,d)=>{ p(3,1,10,13,col); p(2,11,12,3,col); p(3,14,2,1,col); p(7,14,2,1,col); p(11,14,2,1,col);
+    if(d!=='up'){ p(5,5,2,2,'#15151a'); p(9,5,2,2,'#15151a'); p(7,8,2,1,'#15151a'); } },
+  cape:col=>(p,d)=>{ p(2,8,1,6,col); p(13,8,1,6,col); if(d==='up') p(3,8,10,6,col); },
+  fangs:face(p=>{ p(7,7,1,1,'#ffffff'); p(8,7,1,1,'#ffffff'); }),
+  hood:(p,d)=>{ p(3,0,10,3,'#15151a'); p(3,2,1,7,'#15151a'); p(12,2,1,7,'#15151a');
+    if(d==='down'){ p(14,2,1,12,'#8c6239'); p(11,1,4,1,'#c8ccd4'); p(11,2,1,1,'#c8ccd4'); } },
+  stripes:col=>p=>{ p(4,9,8,1,col); p(4,11,8,1,col); },
+  tophat:p=>{ p(5,-3,6,4,'#15151a'); p(3,1,10,1,'#15151a'); p(5,0,6,1,'#a02020'); },
+  bowtie:face(p=>{ p(7,9,2,4,'#f4f4f4'); p(6,8,1,2,'#a02020'); p(9,8,1,2,'#a02020'); p(7,8,2,1,'#f4f4f4'); }),
+  nose:face(p=>p(7,6,2,1,'#e02020')),
+  beret:p=>{ p(4,0,8,2,'#15151a'); p(11,-1,1,1,'#15151a'); },
+  board:col=>hand(p=>{ p(14,1,2,13,col); p(14,6,2,1,'#f4f4f4'); }),
+  golf:hand(p=>{ p(14,3,1,10,'#b8b8b8'); p(13,12,2,1,'#555555'); }),
+  glass:hand(p=>{ p(13,9,2,2,'#a02040'); p(13,8,2,1,'#e8e8f0'); p(13,11,1,2,'#e8e8f0'); }),
+  laptop:hand(p=>{ p(4,10,8,3,'#8a8f98'); p(5,10,6,2,'#7fe0d8'); }),
+  wizard:(p,d)=>{ p(4,0,8,2,'#3a2a8a'); p(5,-2,6,2,'#3a2a8a'); p(6,-4,4,2,'#3a2a8a'); p(7,-5,2,1,'#3a2a8a'); p(3,2,10,1,'#3a2a8a'); p(7,-2,1,1,'#f2c230');
+    if(d!=='up'){ p(5,7,6,2,'#e8e8e8'); p(6,9,4,1,'#e8e8e8'); }
+    if(d==='down'){ p(14,5,1,8,'#8c6239'); p(14,4,1,1,'#f2c230'); } },
+  bigeyes:face(p=>{ p(5,4,2,3,'#15151a'); p(9,4,2,3,'#15151a'); }),
+  K:face(p=>{ p(6,9,1,4,'#e02020'); p(7,10,1,2,'#e02020'); p(8,9,1,1,'#e02020'); p(8,12,1,1,'#e02020'); }),
+  crown:p=>{ p(4,0,8,1,'#f2c230'); p(4,-1,1,1,'#f2c230'); p(7,-1,2,1,'#f2c230'); p(11,-1,1,1,'#f2c230'); p(7,0,2,1,'#e02020'); },
+  patch:face(p=>{ p(4,3,8,1,'#15151a'); p(5,4,2,2,'#15151a'); }),
+  sword:hand(p=>{ p(14,3,1,8,'#c8ccd4'); p(13,11,3,1,'#8c6239'); p(14,12,1,1,'#8c6239'); }),
+  scarf:col=>face(p=>{ p(5,8,6,1,col); p(7,9,2,1,col); }),
+  qmark:face(p=>{ p(7,9,2,1,'#ffffff'); p(8,10,1,1,'#ffffff'); p(7,11,1,1,'#ffffff'); p(7,13,1,1,'#ffffff'); }),
+  goatee:face(p=>p(7,7,2,2,'#3d2414')),
+  monocle:face(p=>{ p(9,4,2,1,'#f2c230'); p(9,6,2,1,'#f2c230'); p(8,5,1,1,'#f2c230'); p(11,5,1,1,'#f2c230'); p(11,6,1,3,'#f2c230'); }),
+  glow:col=>p=>{ p(2,-1,1,1,col); p(13,0,1,1,col); p(1,6,1,1,col); p(14,-2,1,1,col); p(0,2,1,1,col); p(15,8,1,1,col); },
+};
+
+function sp(id,name,type,b,exp,cat,desc,look,sig,l1,l2,evolve){
+  const t=TIERS[type];
+  SPECIES[id]={name,type,base:{hp:b[0],atk:b[1],def:b[2],spd:b[3]},exp,catch:cat,desc,look,
+    moves:[[1,t[0]]].concat(sig?[[1,sig]]:[],[[l1,t[1]],[l2,t[2]]])};
+  if(evolve) SPECIES[id].evolve=evolve;
+}
+// ---- Route 4 / Puerto Carlos
+sp('tourist','TOURIST CARLOS','REGULAR',[54,52,50,48],95,.3,'Stops dead in the middle of the sidewalk. Every single time.',
+  {shirt:'#e8c040',hat:'cap',hatColor:'#f4f4f4',item:'phone',mouth:'smile'},'Traffic Excuse',10,18);
+sp('surfer','SURFER CARLOS','CHILL',[56,56,50,60],100,.28,'Calls everyone "bro". Including the ocean.',
+  {shirt:'#30b8b8',sleeveless:true,mouth:'smile',fx:FX.board('#f2c230')},'Deep Breath',10,18);
+sp('sailor','SAILOR CARLOS','HYPE',[56,60,54,52],100,.28,'Has a tattoo of an anchor. And one of Carlos.',
+  {shirt:'#f4f4f4',hat:'cap',hatColor:'#f4f4f4',mouth:'smile',fx:FX.stripes('#3a5fd8')},'Bell Ring',10,18);
+sp('sushi','SUSHI CARLOS','SNACK',[52,58,48,62],100,.28,'Will tell you the fish was flown in this morning.',
+  {shirt:'#22222c',hat:'headband',hatColor:'#e02020',item:'fork'},'Extra Guac',10,18);
+sp('crossfit','CROSSFIT CARLOS','HYPE',[62,72,58,66],130,.15,'Does CrossFit. Has already told you. Is telling you again.',
+  {shirt:'#15151a',sleeveless:true,wide:true,hat:'headband',hatColor:'#15151a',item:'dumbbell',mouth:'smile'},'Dad Joke',10,18);
+// ---- Route 5 / Carlos Hollow
+sp('camper','CAMPER CARLOS','REGULAR',[58,56,58,46],105,.28,'Tells the same ghost story every year. Scares himself.',
+  {shirt:'#b5462f',hat:'cap',hatColor:'#3f8f6a',item:'mug',fx:FX.stripes('#7a2a1a')},'Bro Hug',12,20);
+sp('ghost','GHOST CARLOS','SPOOKY',[50,60,50,66],110,.26,'It is a bedsheet. There is definitely a Carlos under it.',
+  {fx:FX.sheet('#f4f4f4')},'Ghost Story',12,20,[30,'phantom']);
+sp('vampire','VAMPIRE CARLOS','SPOOKY',[56,64,54,60],115,.24,'Only comes out at night. Mostly because he sleeps until four.',
+  {skin:'#ead8d0',shirt:'#15151a',pants:'#15151a',hair:'#15151a',mouth:'open',fx:all(FX.cape('#a02020'),FX.fangs)},'Eye Roll',12,20);
+sp('zombie','ZOMBIE CARLOS','SPOOKY',[66,60,56,30],115,.24,'Carlos before 9 a.m.',
+  {skin:'#9ac08a',shirt:'#6a6a5a',eyes:'sleepy',mouth:'open'},'Ghost Story',12,20);
+sp('grim','GRIM CARLOS','SPOOKY',[60,74,58,62],150,.12,'Rare. Here to collect the five dollars you owe him.',
+  {skin:'#ead8d0',shirt:'#15151a',pants:'#15151a',mouth:'flat',fx:FX.hood},'Eye Roll',12,20);
+sp('phantom','PHANTOM CARLOS','SPOOKY',[64,78,62,80],170,.1,'Moves your keys one inch to the left. Forever.',
+  {fx:all(FX.sheet('#c8b8f0'),FX.glow('#c8b8f0'))},'Ghost Story',12,20);
+sp('coma','FOODCOMA CARLOS','CHILL',[120,70,62,20],180,.2,'Ate everything at the cookout. Lay down in the road. Stayed.',
+  {shirt:'#e8e0d0',wide:true,bib:true,eyes:'sleepy',mouth:'open'},'Snooze Button',10,18);
+// ---- Route 6 / Gran Carlos
+sp('golfer','GOLF CARLOS','FANCY',[58,62,58,54],120,.26,'Shot a 72. On the front nine.',
+  {shirt:'#f4f4f4',hat:'cap',hatColor:'#f4f4f4',pants:'#d85a5a',fx:FX.golf},'Snub',14,24,[34,'tuxedo']);
+sp('wine','WINE CARLOS','FANCY',[56,60,60,56],120,.26,'Detects notes of oak, cherry, and being better than you.',
+  {shirt:'#5a1a3a',mouth:'smile',fx:FX.glass},'Room Service',14,24);
+sp('crypto','CRYPTO CARLOS','NERD',[52,64,50,70],120,.26,'Was a millionaire for eleven minutes in 2021.',
+  {shirt:'#3a3a44',shades:true,item:'phone',mouth:'smile'},'Fun Fact',14,24);
+sp('brunch','BRUNCH CARLOS','SNACK',[62,60,58,50],120,.26,'Bottomless. In every sense.',
+  {shirt:'#f0b0a0',shades:true,mouth:'open',fx:FX.glass},'Extra Guac',14,24);
+sp('tuxedo','TUXEDO CARLOS','FANCY',[70,80,72,68],175,.1,'Has a guy for that. Has a guy for everything.',
+  {shirt:'#15151a',pants:'#15151a',mouth:'smile',fx:all(FX.bowtie,FX.tophat)},'Snub',14,24);
+// ---- Route 7 / Carlos Park / Safari
+sp('clown','CLOWN CARLOS','WEIRD',[62,66,58,62],135,.24,'Hired for a birthday party in 2016. Never left.',
+  {shirt:'#f0d020',hair:'#e2553a',spiky:true,mouth:'smile',fx:FX.nose},'Dad Joke',16,26);
+sp('mime','MIME CARLOS','WEIRD',[56,62,70,60],135,.24,'Trapped in a box. Do not let him out.',
+  {skin:'#f4f4f4',shirt:'#f4f4f4',pants:'#15151a',mouth:'flat',fx:all(FX.stripes('#15151a'),FX.beret)},'Eye Roll',16,26);
+sp('hippie','HIPPIE CARLOS','CHILL',[66,58,62,50],135,.24,'Has a van. The van has a name.',
+  {shirt:'#b060d0',longHair:true,hat:'headband',hatColor:'#f2c230',glasses:true,mouth:'smile'},'Deep Breath',16,26);
+sp('scout','SCOUT CARLOS','REGULAR',[60,64,62,58],135,.24,'Always prepared. For what, he cannot say.',
+  {shirt:'#a89a6a',hat:'cap',hatColor:'#6b4a2b',fx:FX.scarf('#d8402f')},'Bro Hug',16,26);
+sp('safari','SAFARI CARLOS','HYPE',[64,70,60,66],145,.2,'Wears the full outfit. To the zoo.',
+  {shirt:'#c8b888',pants:'#c8b888',hat:'cap',hatColor:'#c8b888',item:'binoculars'},'Bell Ring',16,26);
+sp('bigfoot','BIGFOOT CARLOS','WEIRD',[84,82,70,56],190,.08,'Rare. Every photo of him is blurry.',
+  {skin:'#7a5632',shirt:'#6b4a2b',pants:'#6b4a2b',hair:'#4a3018',longHair:true,wide:true,mouth:'open'},'Bro Hug',16,26);
+sp('alien','ALIEN CARLOS','WEIRD',[60,84,60,84],190,.08,'Rare. Insists he is from Ohio.',
+  {skin:'#8ad08a',hair:'#8ad08a',shirt:'#c8ccd4',pants:'#8a8f98',mouth:'flat',fx:FX.bigeyes},'Wake Up Sheeple',16,26);
+sp('wizard','WIZARD CARLOS','WEIRD',[70,82,66,74],180,.1,'Level 14 in real life. Level 80 online.',
+  {shirt:'#3a2a8a',robe:true,fx:FX.wizard},'Wake Up Sheeple',16,26);
+// ---- Route 8 / Carlos Central
+sp('coder','CODER CARLOS','NERD',[60,72,58,70],150,.22,'It works on his machine.',
+  {shirt:'#22222c',glasses:true,fx:FX.laptop},'Tech Support',18,28,[42,'genius']);
+sp('chess','CHESS CARLOS','NERD',[66,68,72,54],150,.22,'Thinks twelve moves ahead. Still late.',
+  {shirt:'#6a5a3a',glasses:true,tie:true},'Fun Fact',18,28);
+sp('office','OFFICE CARLOS','REGULAR',[68,66,66,58],150,.22,'Per his last email.',
+  {shirt:'#f4f4f4',tie:true,item:'mug'},'Traffic Excuse',18,28);
+sp('intern','INTERN CARLOS','REGULAR',[56,62,54,80],145,.24,'Unpaid. Thrilled to be here.',
+  {shirt:'#9ad0f0',item:'coffee',mouth:'smile'},'Bro Hug',18,28);
+sp('genius','GENIUS CARLOS','NERD',[74,90,70,84],200,.08,'Corrected the quiz. The quiz thanked him.',
+  {shirt:'#3a5fd8',coat:true,glasses:true,spiky:true},'Tech Support',18,28);
+// ---- Team Karl's knock-off Carloses
+sp('karl','KARL','REGULAR',[66,70,64,66],150,.2,'It is Karl. With a K. Totally different guy.',
+  {shirt:'#22222c',pants:'#22222c',hat:'cap',hatColor:'#22222c',shades:true,fx:FX.K},'Traffic Excuse',14,24);
+sp('carl','CARL','NERD',[62,74,60,70],150,.2,'Just Carl. Dropped the "os". Says it is more efficient.',
+  {shirt:'#22222c',pants:'#22222c',glasses:true,fx:FX.K},'Fun Fact',14,24);
+sp('charles','CHARLES','FANCY',[70,76,70,64],160,.15,'Never Carlos. Never Charlie. Charles.',
+  {shirt:'#22222c',pants:'#22222c',fx:all(FX.K,FX.monocle,FX.tophat)},'Snub',14,24);
+sp('carlito','CARLITO','HYPE',[58,78,56,88],160,.15,'Half the size. Twice the attitude.',
+  {shirt:'#e02020',spiky:true,mouth:'open',fx:FX.K},'Dad Joke',14,24);
+sp('evil','EVIL CARLOS','WEIRD',[80,92,78,82],220,.05,'Has a goatee. That is how you know.',
+  {shirt:'#15151a',pants:'#15151a',fx:all(FX.cape('#5a1a6a'),FX.goatee)},'Eye Roll',14,24);
+// ---- Isla Carlos
+sp('labc','LAB CARLOS','NERD',[64,76,62,70],165,.2,'Technically a scientist. It says so on his mug.',
+  {shirt:'#6aa84f',coat:true,glasses:true,item:'mug'},'Tech Support',20,30);
+sp('trivia','TRIVIA CARLOS','NERD',[68,72,68,66],165,.2,'Team name: "Quiz Pro Quo". Won a $25 bar tab once.',
+  {shirt:'#3f8f6a',glasses:true,mouth:'smile',fx:FX.qmark},'Fun Fact',20,30);
+sp('sunburn','SUNBURN CARLOS','HYPE',[70,74,56,68],165,.2,'Said he does not burn. He burned.',
+  {skin:'#e8806a',shirt:'#f4f4f4',sleeveless:true,shades:true,mouth:'frown'},'Dad Joke',20,30);
+sp('pirate','PIRATE CARLOS','WEIRD',[70,80,64,70],170,.18,'Bought a boat. Changed everything about himself.',
+  {shirt:'#a02020',hat:'headband',hatColor:'#a02020',mouth:'open',fx:all(FX.patch,FX.sword)},'Bro Hug',20,30);
+// ---- the legend
+sp('prime','CARLOS PRIME','REGULAR',[100,100,100,100],300,.04,'The original. The blueprint. Every other Carlos is an echo.',
+  {shirt:'#f2c230',pants:'#f4f4f4',mouth:'smile',fx:all(FX.crown,FX.cape('#a02020'),FX.glow('#fff8c0'))},'Dad Joke',10,18);
+
+Object.assign(LOOKS,{
+  bus:{shirt:'#3a5fd8',hat:'cap',hatColor:'#22222c',mouth:'smile'},
+  captain:{shirt:'#f4f4f4',hat:'cap',hatColor:'#22222c',mouth:'frown',skin:'#b8d0a0'},
+  grandpa:{shirt:'#8a7a5a',hair:'#d8d8d8',glasses:true},
+  grunt:{shirt:'#22222c',pants:'#22222c',hat:'cap',hatColor:'#22222c',fx:FX.K},
+  boss:{shirt:'#15151a',pants:'#15151a',shades:true,fx:all(FX.K,FX.goatee)},
+  coach:{shirt:'#e02020',hat:'cap',hatColor:'#f4f4f4',sleeveless:true,wide:true,mouth:'open'},
+  vip:{shirt:'#15151a',pants:'#15151a',shades:true,mouth:'smile',fx:FX.bowtie},
+  magic:{shirt:'#3a2a8a',fx:all(FX.tophat,FX.cape('#a02020'))},
+  medium:{shirt:'#5a3a7a',longHair:true,hat:'headband',hatColor:'#f2c230',eyes:'sleepy'},
+  quizm:{shirt:'#3f8f6a',glasses:true,mouth:'smile',fx:all(FX.qmark,FX.bowtie)},
+  chef:{shirt:'#f4f4f4',apron:true,hat:'towel',mouth:'smile'},
+  doctor:{shirt:'#58c2b8',coat:true,glasses:true},
+  count:{skin:'#ead8d0',shirt:'#15151a',pants:'#15151a',hair:'#15151a',fx:all(FX.cape('#a02020'),FX.fangs)},
+  don:{shirt:'#f4f4f4',pants:'#f4f4f4',shades:true,fx:FX.tophat},
+  champ:{shirt:'#3a5fd8',spiky:true,mouth:'smile',fx:FX.cape('#f2c230')},
+});
+
+// ---- items
+const ITEMS={
+  ball:{name:'CARLOSBALL',price:100},
+  sball:{name:'SUPER BALL',price:350,badges:3},
+  cola:{name:'CARLOS COLA',price:80,heal:20},
+  big:{name:'BIG GULP',price:200,heal:60},
+  mega:{name:'MEGA GULP',price:500,heal:160,badges:3},
+};
+async function shop(){
+  if(!G.flags.freeBalls){
+    G.flags.freeBalls=true; G.bag.ball+=3;
+    await say('CLERK CARLOS: Welcome to the CARLOSMART! First time? Here, 3 CARLOSBALLS on the house.');
+    await say('You got 3 CARLOSBALLS! Throw them at wild Carloses to catch them.');
+  } else await say('CLERK CARLOS: Welcome back to the CARLOSMART!');
+  while(true){
+    const keys=Object.keys(ITEMS).filter(k=>G.badges.length>=(ITEMS[k].badges||0));
+    setText(`Money: $${G.money}`);
+    const c=await menu(keys.map(k=>`${ITEMS[k].name.padEnd(12)}$${String(ITEMS[k].price).padEnd(4)}x${G.bag[k]||0}`).concat('LEAVE'),{w:140});
+    if(c<0||c===keys.length) break;
+    const k=keys[c];
+    if(G.money<ITEMS[k].price){ await say("CLERK CARLOS: You don't have enough money, Carlos."); continue; }
+    G.money-=ITEMS[k].price; G.bag[k]=(G.bag[k]||0)+1;
+  }
+  await say('CLERK CARLOS: Come again, Carlos!');
+}
+async function useCola(m,key){
+  key=key||'cola'; const it=ITEMS[key];
+  if(m.hp<=0){ await say(`${nm(m)} has fainted. Cola can't fix that.`); return false; }
+  if(m.hp>=stat(m,'hp')){ await say(`${nm(m)} is already at full HP.`); return false; }
+  G.bag[key]--; m.hp=Math.min(stat(m,'hp'),m.hp+it.heal); sfx('heal');
+  await say(`${nm(m)} chugged the ${it.name} and recovered HP!`);
+  return true;
+}
+async function throwBall(key){
+  key=key||'ball';
+  const f=B.foe, s=SPECIES[f.sp];
+  G.bag[key]--;
+  sfx('throw');
+  await say(`You threw a ${ITEMS[key].name}!`);
+  B.showFoe=false; B.ball={shake:false};
+  const p=Math.min(.97,s.catch*(key==='sball'?1.8:1)*(3-2*f.hp/stat(f,'hp')));
+  const per=Math.cbrt(p);
+  let ok=true;
+  for(let i=0;i<3;i++){
+    await sleep(350); B.ball.shake=true; sfx('shake'); await sleep(450); B.ball.shake=false;
+    if(Math.random()>per){ ok=false; break; }
+  }
+  if(!ok){
+    B.ball=null; B.showFoe=true;
+    await say(pick(['Argh! It broke free!','So close! The Carlos escaped!','Nope! It popped right out!']));
+    return false;
+  }
+  await sleep(300);
+  await say(`Gotcha! ${s.name} was caught!`);
+  if(G.party.length<6) G.party.push(f);
+  else { G.box.push(f); await say(`Your party is full, so ${s.name} was sent to CARLOS STORAGE.`); }
+  B.ball=null;
+  return true;
+}
+const TYPE_CHART='HYPE beats SNACK and NERD.  SNACK beats CHILL and FANCY.  CHILL beats HYPE and SPOOKY.  WEIRD beats CHILL and FANCY.  NERD beats WEIRD and SPOOKY.  FANCY beats REGULAR and NERD.  SPOOKY beats HYPE and SNACK.  REGULAR beats WEIRD.';
+async function startMenu(){
+  while(true){
+    ui.text=null;
+    const c=await menu(['CARLOSES','BAG','CARD','TYPES','SAVE','CLOSE'],{x:164,y:6,w:70});
+    if(c===0){
+      if(!G.party.length){ await say("You don't have any Carloses yet."); continue; }
+      const i=await pickMon('Your Carloses. Pick one for details.');
+      if(i<0) continue;
+      const m=G.party[i], s=SPECIES[m.sp];
+      await say(`${s.name}: ${s.type} type, level ${m.lvl}. Moves: ${m.moves.join(', ')}. ${s.desc}`);
+      if(i>0 && await yesNo(`Put ${s.name} at the front of your party?`)){ G.party.splice(i,1); G.party.unshift(m); }
+    } else if(c===1){
+      const keys=Object.keys(ITEMS).filter(k=>G.bag[k]);
+      setText(`Money: $${G.money}.  `+(keys.length?keys.map(k=>`${ITEMS[k].name} x${G.bag[k]}`).join(', '):'Your bag is empty.'));
+      const heal=keys.filter(k=>ITEMS[k].heal);
+      const j=await menu(heal.map(k=>'USE '+ITEMS[k].name).concat('BACK'),{w:112});
+      if(j>=0&&j<heal.length){
+        if(!G.party.length){ await say('Nobody to give it to.'); continue; }
+        const i=await pickMon('Give it to which Carlos?');
+        if(i>=0) await useCola(G.party[i],heal[j]);
+      }
+    } else if(c===2){
+      const keyItems=[G.flags.card&&'GYM MEMBERSHIP',G.flags.horn&&'AIR HORN',G.flags.safari&&'SAFARI PASS'].filter(Boolean);
+      await say(`TRAINER: CARLOS.  Money: $${G.money}.  Carloses owned: ${G.party.length+G.box.length}.  Badges (${G.badges.length}/8): ${G.badges.length?G.badges.join(', '):'none yet'}.${keyItems.length?'  Key items: '+keyItems.join(', ')+'.':''}${G.flags.champion?'  CARLOS LEAGUE CHAMPION!':''}`);
+    } else if(c===3){
+      await say(TYPE_CHART);
+    } else if(c===4){
+      await say(save()?'Game saved!':'Could not save in this browser.');
+    } else break;
+  }
+}
+
+// ---- map tools
+function mkMap(id,w,h,fill,opts,fn){
+  const m=[]; for(let y=0;y<h;y++) m.push(Array(w).fill(fill));
+  const t={ rect:(x,y,ww,hh,c)=>{ for(let j=y;j<y+hh;j++) for(let i=x;i<x+ww;i++) m[j][i]=c; }, put:(x,y,c)=>{ m[y][x]=c; } };
+  t.bld=(x,y,ww,roof,doorX,doorCh)=>{ t.rect(x,y,ww,2,roof); for(let i=0;i<ww;i++) t.put(x+i,y+2,(x+i===doorX)?(doorCh||'D'):(i%2?'w':'W')); };
+  t.flowers=list=>list.forEach(([x,y])=>{ if(m[y][x]==='.') m[y][x]='f'; });
+  t.scatter=(c,list)=>list.forEach(([x,y])=>t.put(x,y,c));
+  t.line=(pts,c)=>{ for(let i=1;i<pts.length;i++){ const [x0,y0]=pts[i-1],[x1,y1]=pts[i]; t.rect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0)+1,Math.abs(y1-y0)+1,c); } };
+  // house: roof rows, then wall rows (windows), the bottom wall row has the door
+  t.house=(x,y,ww,roofRows,wallRows,roof,doorX,doorCh)=>{ t.rect(x,y,ww,roofRows,roof);
+    for(let r=0;r<wallRows;r++) for(let i=0;i<ww;i++) t.put(x+i,y+roofRows+r,(r===wallRows-1&&x+i===doorX)?(doorCh||'D'):(i%2?'w':'W')); };
+  // tower: one row of roof, glass floors below, optional door on the ground floor
+  t.tower=(x,y,ww,hh,doorX,doorCh)=>{ t.rect(x,y,ww,1,'g'); t.rect(x,y+1,ww,hh-1,'Z'); if(doorX!=null) t.put(doorX,y+hh-1,doorCh||'D'); };
+  fn(t);
+  MAPS[id]=Object.assign({rows:m.map(r=>r.join(''))},opts);
+}
+function setTile(map,x,y,c){ const r=MAPS[map].rows; r[y]=r[y].slice(0,x)+c+r[y].slice(x+1); }
+function Tr(id,map,x,y,dir,look,name,party,prize,intro,outro,extra){
+  return {id,map,x,y,dir,look,trainer:Object.assign({name,party,prize,intro,outro},extra||{})};
+}
+function npc(map,x,y,dir,look,text,hidden){ return {map,x,y,dir,look,hidden,talk:async()=>{ for(const t of [].concat(text)) await say(t); }}; }
+
+// ---- the Carlos Bus: fast travel between towns you have visited
+const BUS=[
+  {name:'CARLOSVILLE',map:'world',x:16,y:51},{name:'CARLOS CITY',map:'world',x:17,y:10},
+  {name:'SAN CARLOS',map:'north',x:17,y:18},{name:'CARLOSBAD',map:'east',x:40,y:12},
+];
+function busDriver(map,x,y,dir){
+  return {map,x,y,dir:dir||'up',look:LOOKS.bus,talk:async()=>{
+    const here=areaName();
+    const stops=BUS.filter(s=>G.seen[s.name]&&s.name!==here);
+    if(!stops.length){ await say('BUS DRIVER CARLOS: The CARLOS BUS goes to any town you have already visited. You have not been anywhere else yet!'); return; }
+    setText('BUS DRIVER CARLOS: All aboard the CARLOS BUS! Where to?');
+    const i=await menu(stops.map(s=>s.name).concat('NEVER MIND'),{x:118,y:4,w:118});
+    if(i<0||i===stops.length) return;
+    ui.text=null;
+    await warpTo({map:stops[i].map,x:stops[i].x,y:stops[i].y,dir:'up',ret:stops[i].ret});
+  }};
+}
+ENT.push(busDriver('world',16,52),busDriver('world',17,11),busDriver('north',17,19),busDriver('east',40,13));
+
+// =====================================================================
+// ZONES from Route 4 on. Each zone is one hand-built map: a route along
+// the bottom and a town at the top. You arrive from the south and leave
+// to the north. Coordinates are in tiles, (0,0) is the top-left corner.
+// =====================================================================
+const CENTER_IN={map:'center',x:3,y:5,dir:'up'}, MART_IN={map:'mart',x:3,y:5,dir:'up'};
+function zone(o){
+  mkMap(o.id,o.w,o.h,'#',{outside:true,theme:o.theme,fogY:o.fogY,area:g=>g.y<o.townEnd?o.town:o.route},o.build);
+  const by=o.h-1;
+  WARPS[o.id+':'+o.entryX+','+by]=o.back;                       // step off the bottom edge: back to the last zone
+  WARPS[o.backFrom]={map:o.id,x:o.entryX,y:by-1,dir:'up'};      // the last zone's exit leads here
+  for(const [x,y,to] of o.doors) WARPS[o.id+':'+x+','+y]=to;
+  for(const [x,y,text] of o.signs) SIGNS[o.id+':'+x+','+y]=text;
+  for(const l of o.labels) LABELS.push(Object.assign({map:o.id},l));
+  WILD[o.id]=o.wild;
+  const [sx,sy,dx,dy]=o.bus;                                    // bus stop, then where the driver stands
+  BUS.push({name:o.town,map:o.id,x:sx,y:sy});
+  ENT.push(busDriver(o.id,dx,dy,dy>sy?'up':dy<sy?'down':dx>sx?'left':'right'));
+  o.trainers.forEach((tr,i)=>ENT.push(Tr(o.id+'t'+i,o.id,...tr)));   // [x, y, facing, look, name, party, prize, intro, outro]
+}
+function gymMap(id,b,q,rows){
+  MAPS[id]={rows:rows||['XXXXXXXXXXXX','X'+q+'________'+q+'X','X__________X','X'+b.repeat(7)+'___X','X__________X','X__________X',
+    'X___'+b.repeat(7)+'X','X__________X','X'+q+'________'+q+'X','XXXXXMMXXXXX'],area:null};
+}
+// A gym = two trainers you cannot dodge, a guide, and a leader who hands over a badge.
+function gymSet(o){
+  ENT.push(npc(o.map,7,8,'left',LOOKS.guide,o.guide));
+  if(o.a) ENT.push(Tr(o.map+'a',o.map,5,7,'left',...o.a));
+  if(o.b) ENT.push(Tr(o.map+'b',o.map,6,4,'right',...o.b));
+  const L=o.leader;
+  ENT.push(Tr(o.map,o.map,5,1,'down',L.look,L.name,L.party,L.prize,L.intro,L.outro,{noSight:true,after:L.after,onWin:async()=>{
+    G.badges.push(o.badge); G.bag.sball=(G.bag.sball||0)+5;
+    await say(`You received the ${o.badge} from ${L.name}!`);
+    await say(`${L.name} also handed you 5 SUPER BALLS.`);
+    for(const t of o.next) await say(t);
+    save();
+  }}));
+}
+const need=n=>()=>G.badges.length>=n;
+
+// =========================== ROUTE 4 + PUERTO CARLOS ===========================
+// A beach walk up the coast to a harbor town: piers, the S.S. CARLOS, a lighthouse.
+setTile('east',43,3,','); setTile('east',43,2,','); setTile('east',43,1,','); setTile('east',42,2,'#'); setTile('east',44,2,'#');
+ENT.push(npc('east',43,2,'down',LOOKS.towel,'ATTENDANT CARLOS: ROUTE 4 runs north past the springs to PUERTO CARLOS. Sorry, it is SOAK BADGE holders only. Too many people were bathing in it.',need(2)));
+zone({id:'s4',w:40,h:56,townEnd:28,theme:'sand',town:'PUERTO CARLOS',route:'ROUTE 4',entryX:14,
+  back:{map:'east',x:43,y:2,dir:'down'},backFrom:'east:43,1',
+  build:t=>{
+    t.rect(1,1,38,54,'.');
+    for(let y=0;y<56;y++){ const c=y<29?27:26+Math.round(Math.sin(y/3)*1.2); t.rect(c,y,40-c,1,'~'); }
+    // Route 4: beach grass, palms and rocks along a winding sandy path
+    t.rect(3,49,9,5,':'); t.rect(12,41,6,6,':'); t.rect(3,30,6,7,':'); t.rect(18,29,5,3,':');
+    t.line([[14,55],[14,48],[20,48],[20,40],[10,40],[10,32],[16,32],[16,28]],',');
+    t.scatter('y',[[22,52],[7,45],[19,44],[23,38],[4,42],[18,52],[24,33],[2,46],[9,29]]);
+    t.scatter('O',[[24,46],[21,54],[11,37]]);
+    t.put(13,52,'S');
+    // Puerto Carlos
+    t.rect(16,0,1,4,','); t.rect(16,4,2,25,',');        // main road (one tile wide at the top, two below)
+    t.rect(3,14,24,1,','); t.rect(4,21,22,1,',');        // harbor street and market street
+    t.bld(9,1,5,'o',11,'d'); t.rect(11,4,5,1,',');
+    t.bld(19,2,5,'g',21,'d'); t.rect(18,5,4,1,',');
+    t.house(4,6,9,3,1,'r',8); t.rect(8,10,1,4,',');      // GYM
+    t.bld(4,17,6,'r',6); t.put(6,20,',');                 // CENTER
+    t.bld(19,17,6,'b',21); t.put(21,20,',');              // MART
+    t.rect(26,9,1,5,','); t.rect(27,8,8,2,'k');           // pier
+    t.rect(28,2,9,4,'Y'); t.rect(31,6,1,2,'k');           // the S.S. CARLOS and its gangplank
+    t.rect(36,11,3,2,'O'); t.put(37,10,'I'); t.put(37,9,'I'); t.put(37,8,'i');   // lighthouse
+    t.rect(18,23,9,1,','); t.rect(27,23,6,1,'k'); t.rect(33,22,3,3,'Y');          // ferry pier and ferry
+    t.scatter('l',[[15,13],[18,13],[15,22],[18,22],[25,15]]);
+    t.scatter('e',[[22,12],[24,12]]);
+    t.scatter('y',[[2,9],[13,12],[24,26],[3,24],[10,24],[2,19],[25,7]]);
+    t.put(15,26,'S'); t.put(10,10,'S'); t.put(25,10,'S');
+    t.flowers([[5,12],[11,12],[3,16],[12,16],[13,19],[26,19],[7,25],[20,26],[13,7],[14,9],[24,8]]);
+  },
+  doors:[[6,19,CENTER_IN],[21,19,MART_IN],[8,9,{map:'gym3',x:5,y:8,dir:'up'}],[31,6,{map:'ship',x:8,y:6,dir:'up'}]],
+  signs:[[13,52,'ROUTE 4. North: PUERTO CARLOS. Mind the crabs.'],[15,26,'PUERTO CARLOS. The harbor town. Please do not feed the Carloses.'],
+    [10,10,'PUERTO CARLOS GYM. Leader: COACH CARLOS. Members only. No exceptions. Not even you.'],
+    [25,10,'The S.S. CARLOS. Docked since 2019. The captain refuses to leave.']],
+  labels:[{x:4,y:7,w:9,text:'GYM'},{x:4,y:18,w:6,text:'CENTER'},{x:19,y:18,w:6,text:'MART'},{x:28,y:3,w:9,text:'S.S. CARLOS'}],
+  bus:[13,14,13,15],
+  wild:[['tourist',28,14,16],['surfer',26,14,17],['sailor',22,14,17],['sushi',20,14,17],['yoga',4,15,16]],
+  trainers:[
+    [24,44,'left',SPECIES.surfer.look,'BEACH BUM CARLOS',[['surfer',15],['surfer',16]],300,'BEACH BUM CARLOS: Bro. Brooo. Battle, bro?','BEACH BUM CARLOS: Gnarly loss, bro.'],
+    [6,40,'right',SPECIES.tourist.look,'SIGHTSEER CARLOS',[['tourist',15],['selfie',16]],320,'SIGHTSEER CARLOS: Excuse me, can you take our picture? Actually, battle us first.','SIGHTSEER CARLOS: This is going in the album anyway.'],
+    [20,30,'left',SPECIES.sailor.look,'DECKHAND CARLOS',[['sailor',16],['sushi',17]],340,'DECKHAND CARLOS: Ahoy! I swab decks and I battle Carloses, and the deck is clean.','DECKHAND CARLOS: Back to swabbing.'],
+  ]});
+EXITS.gym3={map:'s4',x:8,y:10,dir:'down'}; EXITS.ship={map:'s4',x:31,y:7,dir:'down'};
+ENT.push(
+  itemEnt('i9','s4',23,54,{cola:3},'You found 3 CARLOS COLAS buried in the sand!'),
+  npc('s4',8,10,'down',LOOKS.coach,"BOUNCER CARLOS: This is a GYM gym. Members only. No GYM MEMBERSHIP card, no entry. Try the captain of the S.S. CARLOS, he has a spare.",()=>G.flags.card),
+  npc('s4',16,1,'down',SPECIES.sailor.look,'HARBOR GUARD CARLOS: ROUTE 5 is rough country. Show me a WHISTLE BADGE from COACH CARLOS and I will let you by.',need(3)),
+  npc('s4',12,22,'down',LOOKS.towny1,'PORT CARLOS: COACH CARLOS and his HYPE-types never get tired. A CHILL Carlos will calm them right down.'),
+  npc('s4',23,13,'up',SPECIES.fishing.look,'FISHERMAN CARLOS: I have been fishing off this harbor for 20 years. I have caught 3 boots and 1 Carlos.'),
+  {map:'s4',x:32,y:23,dir:'left',look:SPECIES.sailor.look,talk:async()=>{
+    if(G.badges.length<6){ await say('FERRY CARLOS: The ferry to ISLA CARLOS only takes trainers with 6 badges. The island is all quiz nerds. You are not ready.'); return; }
+    if(await yesNo('FERRY CARLOS: Six badges! Hop on the ferry to ISLA CARLOS?')){ ui.text=null; await warpTo({map:'isla',x:14,y:25,dir:'up'}); }
+  }});
+mkMap('ship',18,8,'X',{area:'S.S. CARLOS'},t=>{ t.rect(1,1,16,6,'_'); t.rect(1,1,2,1,'K'); t.put(8,1,'B'); t.put(11,1,'B'); t.put(16,1,'K');
+  t.rect(3,3,2,1,'T'); t.put(1,5,'B'); t.put(4,5,'B'); t.rect(11,5,2,1,'T'); t.put(16,5,'p'); t.put(8,7,'M'); t.put(9,7,'M'); });
+ENT.push(
+  Tr('sh1','ship',5,4,'right',SPECIES.sailor.look,'SAILOR CARLOS',[['sailor',16],['surfer',16]],330,'SAILOR CARLOS: Permission to come aboard? DENIED. Battle!','SAILOR CARLOS: Permission granted, I guess.'),
+  Tr('sh2','ship',13,3,'down',SPECIES.sushi.look,'COOK CARLOS',[['sushi',17],['tourist',16]],350,"COOK CARLOS: Out of my galley! Unless you're hungry. Are you hungry?",'COOK CARLOS: The special is humble pie.'),
+  {map:'ship',x:15,y:2,dir:'down',look:LOOKS.captain,talk:async()=>{
+    if(G.flags.card){ await say('CAPTAIN CARLOS: Urp. The ship has not left the dock in years and I am still seasick.'); return; }
+    await say('CAPTAIN CARLOS: Urrgh. Seasick. And we are tied to the pier.');
+    await say('CAPTAIN CARLOS: You want to challenge COACH CARLOS? Take my GYM MEMBERSHIP. I went once. In January.');
+    G.flags.card=true;
+    await say('You got the GYM MEMBERSHIP card!');
+  }});
+gymMap('gym3','T','p');
+gymSet({map:'gym3',badge:'WHISTLE BADGE',
+  guide:"GYM GUIDE CARLOS: Yo, champ! COACH CARLOS is all HYPE, all the time. CHILL Carloses mellow them out. Keep your SNACK-types far away.",
+  a:[SPECIES.crossfit.look,'SPOTTER CARLOS',[['sailor',20],['gamer',20]],400,'SPOTTER CARLOS: You got this, bro! Wait, you are the opponent. You do NOT got this!','SPOTTER CARLOS: Good set.'],
+  b:[SPECIES.cyclist.look,'TREADMILL CARLOS',[['cyclist',21],['dj',21]],420,'TREADMILL CARLOS: I have been on this treadmill for nine hours. I cannot find the stop button. Battle me!','TREADMILL CARLOS: Please unplug it.'],
+  leader:{look:LOOKS.coach,name:'COACH CARLOS',party:[['sailor',22],['cyclist',23],['crossfit',25]],prize:1200,
+    intro:'COACH CARLOS: DROP AND GIVE ME TWENTY! No? Then give me a BATTLE! I am COACH CARLOS and I do not believe in rest days!',
+    outro:'COACH CARLOS: Good hustle out there. Hit the showers.',
+    after:'COACH CARLOS: Hydrate, Carlos. HYDRATE.'},
+  next:['COACH CARLOS: The HARBOR GUARD at the north end of town will let you onto ROUTE 5 now. CARLOS HOLLOW is up there. Creepy place.']});
+
+// =========================== ROUTE 5 + CARLOS HOLLOW ===========================
+// A path through the woods and over a creek, into a foggy town with a graveyard and a haunted tower.
+zone({id:'s5',w:36,h:54,townEnd:27,theme:y=>y<27?'gloom':'grass',fogY:27,town:'CARLOS HOLLOW',route:'ROUTE 5',entryX:18,
+  back:{map:'s4',x:16,y:1,dir:'down'},backFrom:'s4:16,0',
+  build:t=>{
+    // Route 5: two clearings in the forest, joined by one path and a little bridge
+    t.rect(10,41,17,7,'.'); t.rect(11,42,5,5,':'); t.rect(21,42,5,4,':');
+    t.rect(7,29,22,8,'.'); t.rect(8,30,6,6,':'); t.rect(23,31,5,5,':');
+    t.rect(18,27,1,27,',');
+    t.rect(1,37,34,2,'~'); t.rect(18,37,1,2,'k');
+    t.scatter('O',[[25,46],[9,36],[12,30]]);
+    t.put(17,50,'S');
+    t.flowers([[11,47],[26,41],[8,29],[28,36],[20,29]]);
+    // Carlos Hollow
+    t.rect(1,1,34,25,'.');
+    t.rect(18,0,1,27,',');
+    t.rect(3,12,30,1,','); t.rect(3,19,30,1,',');
+    t.rect(23,2,7,1,'v'); t.rect(23,3,7,6,'%'); t.put(26,8,'D'); t.rect(26,9,1,3,',');   // CARLOS TOWER
+    t.rect(3,2,11,1,'J'); t.rect(3,10,11,1,'J'); t.rect(3,2,1,9,'J'); t.rect(13,2,1,9,'J'); t.put(8,10,','); t.put(8,11,',');   // graveyard
+    t.scatter('G',[[5,4],[7,4],[9,4],[11,4],[5,6],[7,6],[9,6],[11,6],[5,8],[9,8],[11,8]]);
+    t.scatter('z',[[4,3],[12,9]]);
+    t.bld(4,15,6,'r',6); t.put(6,18,',');               // CENTER
+    t.bld(10,15,5,'o',12,'d'); t.put(12,18,',');
+    t.bld(24,15,6,'b',26); t.put(26,18,',');             // MART
+    t.rect(4,21,6,3,'~');
+    t.scatter('z',[[21,22],[30,22],[32,4],[31,9],[15,24],[28,24],[20,4],[15,5],[11,23],[2,14],[33,15],[3,25],[33,25]]);
+    t.scatter('l',[[17,11],[19,13],[17,20],[19,18]]);
+    t.put(17,25,'S'); t.put(25,10,'S'); t.put(9,11,'S');
+    t.flowers([[22,10],[30,13],[2,17],[16,22],[24,22],[13,13]]);
+  },
+  doors:[[6,17,CENTER_IN],[26,17,MART_IN],[26,8,{map:'tower',x:6,y:16,dir:'up'}]],
+  signs:[[17,50,'ROUTE 5. North: CARLOS HOLLOW. Do not feed the ghosts.'],[17,25,'CARLOS HOLLOW. Quiet town. Too quiet. Mostly because of the ghosts.'],
+    [25,10,'CARLOS TOWER. Where old Carloses go to haunt.'],[9,11,'CARLOS CEMETERY. Every stone says CARLOS. Every single one.']],
+  labels:[{x:23,y:2,w:7,text:'TOWER'},{x:4,y:16,w:6,text:'CENTER'},{x:24,y:16,w:6,text:'MART'}],
+  bus:[20,19,20,20],
+  wild:[['camper',34,19,22],['ghost',26,19,22],['zombie',22,19,22],['vampire',14,20,22],['grim',4,21,23]],
+  trainers:[
+    [21,46,'left',SPECIES.camper.look,'COUNSELOR CARLOS',[['camper',20],['camper',21]],420,'COUNSELOR CARLOS: Lights out was an HOUR ago. Just kidding, I am lost. Battle?','COUNSELOR CARLOS: I am telling the other counselors.'],
+    [14,33,'right',SPECIES.tinfoil.look,'GHOST HUNTER CARLOS',[['ghost',21],['tinfoil',21]],440,'GHOST HUNTER CARLOS: My equipment is going crazy! Oh. That is just you.','GHOST HUNTER CARLOS: The readings were inconclusive.'],
+    [22,30,'left',SPECIES.zombie.look,'NIGHT SHIFT CARLOS',[['zombie',22],['friday',22]],460,'NIGHT SHIFT CARLOS: I have been awake for 31 hours. Is this a battle or a dream?','NIGHT SHIFT CARLOS: A dream, then. Goodnight.'],
+  ]});
+EXITS.tower={map:'s5',x:26,y:9,dir:'down'};
+ENT.push(
+  itemEnt('i7','s5',26,36,{big:2},'You found 2 BIG GULP COLAS by an old campfire!'),
+  npc('s5',11,21,'left',LOOKS.towny2,["HOLLOW CARLOS: GRANDPA CARLOS climbed the TOWER to visit his old friends. Then those TEAM KARL weirdos went in after him.",'HOLLOW CARLOS: TEAM KARL. They say they are "the real ones". They spell it with a K.']),
+  npc('s5',30,11,'left',LOOKS.towny1,'SPOOKED CARLOS: SPOOKY Carloses scare the HYPE right out of you. But a CHILL Carlos is too relaxed to be scared, and a NERD will explain that ghosts are not real.'),
+  {map:'s5',x:18,y:1,dir:'down',look:SPECIES.coma.look,still:true,hidden:()=>G.flags.coma,talk:async()=>{
+    if(!G.flags.horn){ await say('A huge Carlos is asleep in the middle of the road, surrounded by empty plates.'); await say('It will not wake up. You would need something really, really loud.'); return; }
+    await say('You blasted the AIR HORN!');
+    await say('FOODCOMA CARLOS woke up! It is furious, and still very full!');
+    const r=await battle({wild:true,boss:true,party:[makeMon('coma',26)]});
+    if(r==='lose'){ await blackout(); return; }
+    G.flags.coma=true;
+    if(r!=='caught') await say('FOODCOMA CARLOS waddled off to look for dessert. The road is clear!');
+  }});
+mkMap('tower',14,18,'X',{dark:true,area:'CARLOS TOWER'},t=>{ t.rect(1,1,12,16,'h'); t.rect(1,12,9,1,'G'); t.rect(4,8,9,1,'G'); t.rect(1,4,9,1,'G');
+  t.put(6,17,'M'); t.put(7,17,'M'); [[3,15],[10,14],[6,10],[11,10],[2,6],[8,6],[3,2],[10,2]].forEach(([x,y])=>t.put(x,y,'G')); });
+WILD.tower=[['ghost',34,20,23],['vampire',28,20,23],['zombie',28,20,23],['grim',10,22,24]];
+ENT.push(
+  Tr('tw1','tower',1,9,'right',LOOKS.grunt,'GRUNT KARL',[['karl',22]],500,'GRUNT KARL: Halt! This tower belongs to TEAM KARL now! We are the REAL ones! With a K!','GRUNT KARL: Karl with a K... is OK with losing. No he is not.'),
+  Tr('tw2','tower',12,5,'left',LOOKS.grunt,'GRUNT KARL',[['carl',22],['karl',23]],540,'GRUNT KARL: The boss says every Carlos is a knock-off Karl. Makes you think. Battle!','GRUNT KARL: I will have to think about this some more.'),
+  {map:'tower',x:6,y:2,dir:'down',look:LOOKS.grandpa,talk:async()=>{
+    if(G.flags.horn){ await say('GRANDPA CARLOS: I am fine up here, Carlos. My friends and I have a lot of haunting to catch up on.'); return; }
+    await say('GRANDPA CARLOS: Carlos! You chased off those KARL fellows? In my day we had one Carlos and we were GRATEFUL.');
+    await say('GRANDPA CARLOS: Here. I use this to wake up your uncle Carlos after dinner. Loudest thing I own.');
+    G.flags.horn=true;
+    await say('You got the AIR HORN!');
+    await say('GRANDPA CARLOS: There is a big fella asleep on the road north of town. That ought to shift him.');
+  }});
+
+// =========================== ROUTE 6 + GRAN CARLOS ===========================
+// CARLOS BRIDGE: a long bridge across the river with a trainer every few steps. Then the big city.
+zone({id:'s6',w:40,h:58,townEnd:28,theme:'grass',town:'GRAN CARLOS',route:'ROUTE 6',entryX:20,
+  back:{map:'s5',x:18,y:1,dir:'down'},backFrom:'s5:18,0',
+  build:t=>{
+    t.rect(1,1,38,56,'.');
+    // Route 6
+    t.rect(3,50,11,5,':'); t.rect(26,50,11,5,':');
+    t.rect(20,49,1,9,',');
+    t.rect(1,34,38,15,'~'); t.rect(19,34,2,15,'k');      // the river and CARLOS BRIDGE
+    t.rect(4,30,10,3,':'); t.rect(25,30,10,3,':');
+    t.rect(19,29,2,5,',');
+    t.scatter('O',[[16,52],[24,55],[35,31]]);
+    t.scatter('#',[[1,49],[2,49],[1,50],[37,49],[38,49],[38,50],[15,55],[16,55],[2,29],[37,29]]);
+    t.put(21,50,'S');
+    t.flowers([[17,50],[23,52],[15,30],[23,31],[8,55],[30,55]]);
+    // Gran Carlos
+    t.rect(1,28,38,1,'n'); t.rect(19,27,2,2,'q');       // hedge wall with a gate
+    t.rect(2,18,36,9,'q');                                // the plaza
+    t.rect(18,20,4,3,'U');                                // fountain
+    t.scatter('l',[[3,19],[36,19],[3,25],[36,25],[23,4],[23,12],[25,6]]);
+    t.scatter('e',[[14,25],[25,25]]);
+    t.scatter('n',[[8,22],[9,22],[30,22],[31,22]]);
+    t.tower(2,2,8,8,5);       t.rect(5,10,1,8,'q');      // DEPT. STORE (the mart)
+    t.house(12,3,9,3,1,'o',16); t.rect(16,7,1,11,'q');   // GYM
+    t.rect(24,0,1,18,'q');                                // north road
+    t.house(27,2,10,2,4,'t',31,'d'); t.rect(31,8,1,2,'q'); t.rect(25,10,12,1,'q');   // GRAND HOTEL
+    t.bld(28,13,6,'r',30); t.rect(30,16,1,2,'q');        // CENTER
+    t.rect(2,11,3,1,'n'); t.rect(6,11,4,1,'n'); t.rect(12,9,9,1,'n');
+    t.put(17,27,'S'); t.put(15,7,'S'); t.put(30,8,'S'); t.put(4,10,'S');
+    t.flowers([[11,12],[13,14],[20,13],[22,15],[10,16],[26,14],[36,13],[35,16],[3,14],[8,14]]);
+  },
+  doors:[[5,9,MART_IN],[16,6,{map:'gym4',x:5,y:8,dir:'up'}],[30,15,CENTER_IN]],
+  signs:[[21,50,'CARLOS BRIDGE. Three trainers bet you cannot cross it.'],[17,27,'GRAN CARLOS. The biggest, fanciest city in the region. There is a dress code.'],
+    [15,7,'GRAN CARLOS GYM. Leader: VIP CARLOS. "Are you on the list?"'],[30,8,'THE GRAND HOTEL CARLOS. Fully booked. By Carlos.'],
+    [4,10,'CARLOS DEPARTMENT STORE. Everything a Carlos could want. Mostly snacks.']],
+  labels:[{x:2,y:2,w:8,text:'DEPT. STORE'},{x:12,y:4,w:9,text:'GYM'},{x:27,y:3,w:10,text:'GRAND HOTEL'},{x:28,y:14,w:6,text:'CENTER'}],
+  bus:[10,18,10,19],
+  wild:[['golfer',26,24,27],['wine',24,24,27],['crypto',24,24,27],['brunch',22,24,27],['selfie',4,24,26]],
+  trainers:[
+    [19,45,'right',SPECIES.golfer.look,'CADDY CARLOS',[['golfer',25],['golfer',26]],520,'CADDY CARLOS: Fore! That means battle. I think. I am new.','CADDY CARLOS: That is a bogey for me.'],
+    [20,41,'left',SPECIES.wine.look,'SOMMELIER CARLOS',[['wine',26],['brunch',26]],540,'SOMMELIER CARLOS: May I recommend the battle? It pairs well with your defeat.','SOMMELIER CARLOS: Corked. The whole evening is corked.'],
+    [19,37,'right',SPECIES.crypto.look,'DAY TRADER CARLOS',[['crypto',27],['crypto',27]],560,'DAY TRADER CARLOS: I am up 400 percent today! Wait. Down. Up! Battle me while I am up!','DAY TRADER CARLOS: Down. Definitely down.'],
+  ]});
+EXITS.gym4={map:'s6',x:16,y:7,dir:'down'};
+ENT.push(
+  npc('s6',24,1,'down',LOOKS.vip,'DOORMAN CARLOS: ROUTE 7 is for people of a certain standing. A VELVET BADGE would do nicely.',need(4)),
+  npc('s6',26,21,'left',SPECIES.wine.look,'GRAN CARLOS CARLOS: FANCY Carloses look down on REGULAR ones and outclass the NERDs. But spill a SNACK on them, or show them something WEIRD, and they fall apart.'),
+  npc('s6',12,23,'right',SPECIES.selfie.look,'TOURIST CARLOS: I came all this way to take a selfie with the fountain. The fountain is also named Carlos.'),
+  {map:'s6',x:35,y:11,dir:'up',look:SPECIES.crypto.look,talk:async()=>{
+    await say('HIGH ROLLER CARLOS: Double or nothing, Carlos? $200 on a coin flip.');
+    if(G.money<200){ await say('HIGH ROLLER CARLOS: Come back when you have $200.'); return; }
+    if(!(await yesNo('Bet $200?'))) return;
+    if(Math.random()<.47){ G.money+=200; await say('Heads! You won $200!'); } else { G.money-=200; await say('Tails. HIGH ROLLER CARLOS pockets your $200.'); }
+  }});
+gymMap('gym4','p','K');
+gymSet({map:'gym4',badge:'VELVET BADGE',
+  guide:'GYM GUIDE CARLOS: Yo, champ! VIP CARLOS only uses FANCY Carloses. SNACK and WEIRD moves ruin their whole evening. Leave your NERDs and REGULARs in the coat check.',
+  a:[SPECIES.golfer.look,'VALET CARLOS',[['golfer',27],['wine',27]],600,'VALET CARLOS: I parked a hundred cars today. I will park you too.','VALET CARLOS: Your ticket, sir.'],
+  b:[SPECIES.brunch.look,'HOSTESS CARLOS',[['brunch',28],['wine',28]],620,'HOSTESS CARLOS: Do you have a reservation? No? Then we have a problem.','HOSTESS CARLOS: Right this way.'],
+  leader:{look:LOOKS.vip,name:'VIP CARLOS',party:[['wine',28],['golfer',29],['tuxedo',31]],prize:1800,
+    intro:'VIP CARLOS: Hm. Who let you past the rope? No matter. I am VIP CARLOS. Try not to scuff the floor while you lose.',
+    outro:'VIP CARLOS: ...Put this one on the list.',
+    after:'VIP CARLOS: You are welcome back any time. Through the service entrance.'},
+  next:['VIP CARLOS: The DOORMAN on the north road will let you onto ROUTE 7. CARLOS PARK is up there. Very outdoorsy. Not my scene.']});
+
+// =========================== ROUTE 7 + CARLOS PARK ===========================
+// A flower meadow with a lake, then a park town with a hedge maze and the SAFARI gate.
+zone({id:'s7',w:40,h:56,townEnd:28,theme:'park',town:'CARLOS PARK',route:'ROUTE 7',entryX:20,
+  back:{map:'s6',x:24,y:1,dir:'down'},backFrom:'s6:24,0',
+  build:t=>{
+    t.rect(1,1,38,54,'.');
+    // Route 7
+    t.rect(3,35,10,8,'~'); t.rect(10,40,3,1,'k');        // lake with a little dock
+    t.rect(30,51,7,4,':'); t.rect(4,46,10,6,':'); t.rect(18,36,8,5,':'); t.rect(27,30,7,3,':');
+    t.line([[20,55],[20,50],[28,50],[28,42],[16,42],[16,34],[22,34],[22,29]],',');
+    t.rect(30,36,4,4,'#'); t.rect(33,44,3,3,'#'); t.scatter('#',[[8,31],[11,30],[2,44],[36,40],[36,30],[37,31]]);
+    t.rect(21,49,7,1,'n'); t.put(24,51,'e'); t.put(19,52,'S');
+    t.flowers([[15,44],[16,45],[17,44],[18,46],[22,44],[23,45],[24,44],[25,46],[21,52],[22,53],[23,52],[25,53],[26,52],[15,52],[16,53],[17,52],
+               [31,44],[32,42],[29,38],[27,36],[14,32],[15,31],[18,31],[25,33],[6,33],[4,32],[11,44],[34,48],[35,49]]);
+    // Carlos Park
+    t.rect(1,28,38,1,'n'); t.rect(22,28,2,1,',');
+    t.rect(22,4,2,24,',');                                // main walk
+    t.house(16,1,14,2,1,'g',22);                          // SAFARI gate
+    t.house(3,6,8,3,1,'v',6); t.rect(6,10,1,3,',');      // GYM (the magic tent)
+    t.rect(3,13,34,1,',');
+    t.bld(29,7,6,'r',31); t.rect(31,10,1,3,',');          // CENTER
+    t.bld(29,16,6,'b',31); t.rect(31,19,1,2,','); t.rect(24,21,8,1,',');   // MART
+    t.rect(36,0,1,14,',');                                // north trail
+    ['n.nnnnnnnnnn','n.n........n','n.n.nnn.n.nn','n...n...n..n','nnn.n.nnnn.n','n...n.n....n',
+     'n.nnn.n.nnnn','n.n...n....n','n.n.nnnnnn.n','n...n......n','nnnnnnnnnnnn'].forEach((r,j)=>[...r].forEach((c,i)=>t.put(3+i,15+j,c)));   // HEDGE MAZE
+    t.rect(26,23,6,4,'~');
+    t.scatter('l',[[21,8],[24,8],[21,18],[24,16]]);
+    t.scatter('e',[[20,24],[25,19]]);
+    t.put(21,27,'S'); t.put(7,10,'S'); t.put(21,4,'S'); t.put(5,14,'S');
+    t.flowers([[16,6],[17,7],[18,6],[26,6],[27,7],[28,5],[16,16],[17,17],[18,16],[16,20],[18,21],[25,23],[32,23],[33,25],[25,27],[32,27],
+               [12,5],[13,6],[14,5],[2,6],[34,10],[35,12],[33,15],[35,18],[36,22],[36,26],[34,27],[19,9],[19,12]]);
+  },
+  doors:[[22,3,{map:'safari',x:12,y:20,dir:'up'}],[6,9,{map:'gym5',x:5,y:8,dir:'up'}],[31,9,CENTER_IN],[31,18,MART_IN]],
+  signs:[[19,52,'ROUTE 7. North: CARLOS PARK. Please stay on the path. Nobody does.'],[21,27,'CARLOS PARK. Home of the CARLOS SAFARI. Do not tap the glass. There is no glass.'],
+    [7,10,'CARLOS PARK GYM. Leader: MAGIC CARLOS. "Pick a Carlos, any Carlos."'],[21,4,'THE CARLOS SAFARI. Rare Carloses in their natural habitat. $500 for a lifetime pass.'],
+    [5,14,'CARLOS HEDGE MAZE. There is a prize in the middle. Probably.']],
+  labels:[{x:16,y:2,w:14,text:'CARLOS SAFARI'},{x:3,y:7,w:8,text:'GYM'},{x:29,y:8,w:6,text:'CENTER'},{x:29,y:17,w:6,text:'MART'}],
+  bus:[23,25,24,25],
+  wild:[['clown',26,29,32],['mime',24,29,32],['hippie',24,29,32],['scout',22,29,32],['safari',4,30,32]],
+  trainers:[
+    [32,47,'left',SPECIES.clown.look,'BIRTHDAY CARLOS',[['clown',30],['clown',31]],620,'BIRTHDAY CARLOS: It is my birthday! It is always my birthday! Battle me, it is my birthday!','BIRTHDAY CARLOS: Worst birthday yet.'],
+    [13,38,'right',SPECIES.hippie.look,'DRUM CIRCLE CARLOS',[['hippie',31],['mime',31]],640,'DRUM CIRCLE CARLOS: Feel the rhythm, man. Now feel my Carloses.','DRUM CIRCLE CARLOS: You really harshed the circle.'],
+    [26,32,'left',SPECIES.scout.look,'TROOP LEADER CARLOS',[['scout',32],['scout',32],['camper',32]],660,'TROOP LEADER CARLOS: Troop! Formation! Battle badge time!','TROOP LEADER CARLOS: No badges for anyone today.'],
+  ]});
+EXITS.gym5={map:'s7',x:6,y:10,dir:'down'};
+WARPS['safari:12,21']={map:'s7',x:22,y:4,dir:'down'};
+ENT.push(
+  itemEnt('i8','s7',10,40,{sball:2},'You found 2 SUPER BALLS at the end of the dock!'),
+  itemEnt('i10','s7',8,24,{mega:1,sball:2},'You reached the middle of the HEDGE MAZE! The prize: a MEGA GULP COLA and 2 SUPER BALLS.'),
+  npc('s7',36,1,'down',SPECIES.scout.look,'PARK RANGER CARLOS: The trail to ROUTE 8 is closed to anyone without a RABBIT BADGE. MAGIC CARLOS made the last hiker disappear.',need(5)),
+  npc('s7',19,20,'right',SPECIES.hippie.look,'PARK CARLOS: WEIRD Carloses freak out the CHILL and embarrass the FANCY. But a NERD sees through the trick, and a REGULAR is just not impressed.'),
+  npc('s7',33,21,'left',SPECIES.birder.look,'DUCK CARLOS: I feed the ducks here every day. They are also named Carlos. All of them.'),
+  {map:'s7',x:22,y:4,dir:'down',look:SPECIES.safari.look,hidden:()=>G.flags.safari,talk:async()=>{
+    await say('WARDEN CARLOS: Welcome to the CARLOS SAFARI! Rare Carloses roam free in here. Lifetime pass is $500.');
+    if(G.money<500){ await say('WARDEN CARLOS: Come back with $500.'); return; }
+    if(!(await yesNo('Buy a SAFARI PASS for $500?'))) return;
+    G.money-=500; G.flags.safari=true;
+    await say('You got the SAFARI PASS! WARDEN CARLOS stepped aside.');
+  }});
+mkMap('safari',26,22,'#',{outside:true,theme:'park',area:'CARLOS SAFARI'},t=>{ t.rect(2,2,22,18,'.'); t.rect(3,3,9,6,':'); t.rect(14,3,9,6,':');
+  t.rect(3,12,7,6,':'); t.rect(16,12,7,6,':'); t.rect(11,10,4,3,'~'); t.rect(12,13,2,7,','); t.put(12,20,','); t.put(12,21,','); t.put(13,20,'#');
+  t.flowers([[2,10],[23,10],[10,19],[15,19],[12,2],[13,9]]); });
+WILD.safari=[['safari',38,30,33],['hippie',20,30,33],['scout',20,30,33],['bigfoot',8,32,34],['alien',8,32,34],['clown',6,30,33]];
+ENT.push(itemEnt('i3','safari',22,18,{sball:3},'You found 3 SUPER BALLS! Somebody gave up on catching BIGFOOT CARLOS.'),
+         itemEnt('i4','safari',3,10,{mega:2},'You found 2 MEGA GULP COLAS!'));
+gymMap('gym5','B','p');
+gymSet({map:'gym5',badge:'RABBIT BADGE',
+  guide:'GYM GUIDE CARLOS: Yo, champ! MAGIC CARLOS is all WEIRD-types. NERD and REGULAR moves break the illusion. Hide your CHILL and FANCY ones.',
+  a:[SPECIES.mime.look,'ASSISTANT CARLOS',[['mime',32],['clown',32]],700,'ASSISTANT CARLOS: I get sawed in half twice a day. You do not scare me.','ASSISTANT CARLOS: Sawed in half AND beaten. Great.'],
+  b:[SPECIES.tinfoil.look,'HECKLER CARLOS',[['tinfoil',33],['caveman',33]],720,'HECKLER CARLOS: I KNOW HOW HE DOES IT! IT IS UP HIS SLEEVE! Also, battle!','HECKLER CARLOS: Okay, I do not know how he does it.'],
+  leader:{look:LOOKS.magic,name:'MAGIC CARLOS',party:[['mime',33],['clown',34],['wizard',36]],prize:2400,
+    intro:'MAGIC CARLOS: Welcome, welcome! I am the amazing MAGIC CARLOS! For my first trick, I will make your winning streak... disappear!',
+    outro:'MAGIC CARLOS: And for my final trick... a badge, from behind your ear.',
+    after:'MAGIC CARLOS: A magician never reveals his secrets. Mostly because I forgot them.'},
+  next:['MAGIC CARLOS: The trail in the north-east corner of the park leads to ROUTE 8. CARLOS CENTRAL is at the end. I hear TEAM KARL has been causing trouble there.']});
+
+// =========================== ROUTE 8 + CARLOS CENTRAL ===========================
+// A highway with weedy lots on both sides, then downtown: avenues, crosswalks and towers.
+zone({id:'s8',w:40,h:56,townEnd:28,theme:'grass',town:'CARLOS CENTRAL',route:'ROUTE 8',entryX:20,
+  back:{map:'s7',x:36,y:1,dir:'down'},backFrom:'s7:36,0',
+  build:t=>{
+    t.rect(1,1,38,54,'.');
+    // Route 8
+    t.rect(3,32,12,6,':'); t.rect(26,33,10,5,':'); t.rect(4,45,9,7,':'); t.rect(27,46,9,6,':');
+    t.rect(19,29,3,26,'a'); t.rect(20,29,1,27,'A');
+    t.scatter('l',[[18,34],[22,40],[18,46],[22,52]]);
+    t.bld(30,40,6,'g',33,'d'); t.bld(4,40,6,'o',6,'d');
+    t.scatter('#',[[2,30],[3,30],[37,30],[37,31],[2,43],[37,43],[24,30],[15,42]]);
+    t.put(18,53,'S');
+    // Carlos Central
+    t.rect(1,28,38,1,'J'); t.rect(19,28,3,1,'a'); t.put(20,28,'A');
+    t.rect(1,10,38,3,'q');                                  // north sidewalk
+    t.rect(1,13,38,3,'a'); t.rect(1,14,38,1,'=');           // CARLOS AVENUE
+    t.rect(1,16,38,2,'q');                                  // south sidewalk
+    t.rect(19,16,3,12,'a'); t.rect(20,16,1,12,'A');         // MAIN STREET
+    t.rect(19,13,3,3,'a');
+    t.rect(18,13,1,3,'x'); t.rect(22,13,1,3,'x'); t.rect(19,16,3,1,'x');
+    t.rect(17,18,2,10,'q'); t.rect(22,18,2,10,'q');
+    t.scatter('V',[[3,13],[13,13],[27,13],[10,15],[34,15]]);
+    t.house(3,3,9,3,1,'v',7); t.rect(7,7,1,3,'q');         // GYM
+    t.tower(13,1,5,9,15,'d');                               // an office tower
+    t.rect(19,1,3,9,'q'); t.rect(19,3,3,3,'U');             // plaza with a fountain
+    t.tower(24,1,11,9,29);                                  // CARLCO HQ
+    t.rect(36,1,3,9,'#');
+    t.bld(3,19,6,'r',5); t.rect(5,22,1,2,'q'); t.rect(2,24,15,1,'q');      // CENTER
+    t.tower(10,18,5,5);                                     // another office block
+    t.bld(32,19,6,'b',34); t.rect(34,22,1,2,'q'); t.rect(24,24,14,1,'q');  // MART
+    t.scatter('l',[[4,12],[12,12],[26,12],[36,12],[4,17],[12,17],[28,17],[36,17]]);
+    t.rect(25,26,3,2,'#'); t.scatter('#',[[2,26],[36,26],[37,26],[11,26]]);
+    t.put(16,27,'S'); t.put(23,9,'S'); t.put(8,7,'S');
+    t.flowers([[2,8],[9,9],[12,9],[2,21],[2,22],[30,21],[29,26],[14,25],[33,26],[24,21]]);
+  },
+  doors:[[7,6,{map:'gym6',x:5,y:8,dir:'up'}],[29,9,{map:'hq',x:7,y:12,dir:'up'}],[5,21,CENTER_IN],[34,21,MART_IN]],
+  signs:[[18,53,'ROUTE 8. North: CARLOS CENTRAL. Traffic is light. It is all Carloses.'],[16,27,'CARLOS CENTRAL. Downtown. Home of CARLCO, makers of the CARLOSBALL.'],
+    [23,9,'CARLCO HEADQUARTERS. "A Carlos in every ball."'],[8,7,'CARLOS CENTRAL GYM. Leader: MEDIUM CARLOS. "I knew you were coming."']],
+  labels:[{x:3,y:4,w:9,text:'GYM'},{x:24,y:1,w:11,text:'CARLCO HQ'},{x:3,y:20,w:6,text:'CENTER'},{x:32,y:20,w:6,text:'MART'}],
+  bus:[16,16,16,17],
+  wild:[['coder',26,34,37],['chess',24,34,37],['office',26,34,37],['intern',24,34,37]],
+  trainers:[
+    [17,48,'right',SPECIES.office.look,'MANAGER CARLOS',[['office',35],['intern',35],['office',36]],760,'MANAGER CARLOS: Let us circle back and touch base on a battle. Does now work? I put it on your calendar.','MANAGER CARLOS: Let us take this offline.'],
+    [23,37,'left',SPECIES.coder.look,'HACKATHON CARLOS',[['coder',36],['chess',36]],780,'HACKATHON CARLOS: 40 hours, no sleep, one app. It orders pizza. Battle me before I crash.','HACKATHON CARLOS: Segfault.'],
+    [17,31,'right',LOOKS.grunt,'GRUNT KARL',[['karl',36],['carl',36]],800,'GRUNT KARL: The city is under new management. KARL management. Turn around, Carlos.','GRUNT KARL: The boss is going to hear about this. From me. Crying.'],
+  ]});
+EXITS.gym6={map:'s8',x:7,y:7,dir:'down'}; EXITS.hq={map:'s8',x:29,y:10,dir:'down'};
+ENT.push(
+  npc('s8',7,7,'down',LOOKS.grunt,'GRUNT KARL: The GYM is closed by order of BOSS KARL. He is up in CARLCO HQ, renaming everything. Go away.',()=>G.flags.hq),
+  npc('s8',12,11,'down',SPECIES.office.look,['CENTRAL CARLOS: TEAM KARL marched into CARLCO HQ this morning. They want every CARLOSBALL relabeled as a "KARLBALL".','CENTRAL CARLOS: Somebody has to stop them. Somebody with a lot of Carloses.']),
+  npc('s8',26,17,'left',SPECIES.chess.look,'CHESS CARLOS: NERD Carloses debunk the SPOOKY and outthink the WEIRD. HYPE ones just shove us in lockers. FANCY ones will not even talk to us.'),
+  npc('s8',20,7,'up',SPECIES.intern.look,'INTERN CARLOS: I am on my lunch break. It is a 4 minute lunch break. Do not talk to me. Too late.'));
+mkMap('hq',16,14,'X',{area:'CARLCO HQ'},t=>{ t.rect(1,1,14,12,'_'); t.rect(1,9,11,1,'T'); t.rect(4,6,11,1,'K'); t.rect(1,3,11,1,'T');
+  t.put(7,13,'M'); t.put(8,13,'M'); t.put(1,12,'p'); t.put(14,12,'p'); t.put(1,1,'K'); t.put(14,1,'K'); });
+ENT.push(
+  Tr('hq1','hq',14,10,'left',LOOKS.grunt,'GRUNT KARL',[['karl',35],['karl',35]],820,'GRUNT KARL: Welcome to KARLCO. That is what it is called now.','GRUNT KARL: Fine, CARLCO. For now.'),
+  Tr('hq2','hq',1,7,'right',LOOKS.grunt,'GRUNT KARL',[['carl',35],['carlito',36]],840,'GRUNT KARL: I changed every nameplate in this building. Do you know how many Carloses work here?','GRUNT KARL: All of them. It was all of them.'),
+  Tr('hq3','hq',14,4,'left',LOOKS.grunt,'GRUNT KARL',[['carlito',36],['charles',36]],860,'GRUNT KARL: The boss is right behind me. Literally. He can hear this.','GRUNT KARL: Sorry, boss.'),
+  {id:'boss1',map:'hq',x:7,y:1,dir:'down',look:LOOKS.boss,hidden:()=>G.flags.hq,
+    trainer:{name:'BOSS KARL',noSight:true,party:[['karl',37],['charles',37],['carlito',38]],prize:2500,
+      intro:'BOSS KARL: So. You are the Carlos who has been beating my Karls. I am BOSS KARL. There was a time everyone called ME Carlos. Then HE showed up. I will take back what is mine, one nameplate at a time.',
+      outro:'BOSS KARL: Hmph. You fight like him. This is not over, Carlos.',
+      onWin:async()=>{ G.flags.hq=true; G.bag.mega=(G.bag.mega||0)+3;
+        await say('BOSS KARL and TEAM KARL fled the building!');
+        await say('CEO CARLOS: You saved CARLCO! Take these 3 MEGA GULP COLAS. And the GYM across the street should be open again.'); save(); }}},
+  npc('hq',9,1,'down',SPECIES.tuxedo.look,'CEO CARLOS: Thanks to you, a CARLOSBALL is still a CARLOSBALL. Imagine a "KARLBALL". Ridiculous.',()=>!G.flags.hq));
+gymMap('gym6','G','G');
+gymSet({map:'gym6',badge:'CRYSTAL BADGE',
+  guide:'GYM GUIDE CARLOS: Yo, champ! MEDIUM CARLOS channels SPOOKY-types. CHILL and NERD Carloses are not scared at all. HYPE and SNACK ones will be hiding behind you.',
+  a:[SPECIES.ghost.look,'SEANCE CARLOS',[['ghost',37],['zombie',37]],900,'SEANCE CARLOS: Is anybody there? Knock once for battle.','SEANCE CARLOS: The spirits say "ouch".'],
+  b:[SPECIES.vampire.look,'TAROT CARLOS',[['vampire',38],['ghost',38]],920,'TAROT CARLOS: I drew your card. It is "The Loser". Reversed. Hm. That might mean me.','TAROT CARLOS: The cards do not lie.'],
+  leader:{look:LOOKS.medium,name:'MEDIUM CARLOS',party:[['vampire',38],['grim',39],['phantom',41]],prize:3000,
+    intro:'MEDIUM CARLOS: I knew you would come, Carlos. I saw it in the crystal ball. I also saw who wins. I will not spoil it.',
+    outro:'MEDIUM CARLOS: Just as I foresaw. I said I would not spoil it.',
+    after:'MEDIUM CARLOS: I see an island in your future. And a quiz. Study.'},
+  next:['MEDIUM CARLOS: With six badges, the ferry in PUERTO CARLOS will take you to ISLA CARLOS. Take the CARLOS BUS back to the harbor.']});
+
+// =========================== ISLA CARLOS ===========================
+mkMap('isla',30,30,'~',{outside:true,theme:'sand',area:'ISLA CARLOS'},t=>{ t.rect(4,4,22,22,'.'); t.rect(14,8,2,18,','); t.rect(5,17,20,2,',');
+  t.bld(10,5,10,'o',14); t.bld(5,14,6,'r',7); t.bld(19,14,6,'b',21); t.rect(5,20,7,5,':'); t.rect(18,20,7,5,':'); t.put(20,7,'S'); t.put(16,24,'S');
+  [[4,4],[25,4],[4,25],[25,25],[5,4],[24,4],[4,10],[25,10]].forEach(([x,y])=>t.put(x,y,'#')); t.flowers([[6,9],[23,9],[7,11],[22,12],[12,12]]); });
+WARPS['isla:14,7']={map:'gym7',x:5,y:7,dir:'up'}; EXITS.gym7={map:'isla',x:14,y:8,dir:'down'};
+WARPS['isla:7,16']={map:'center',x:3,y:5,dir:'up'}; WARPS['isla:21,16']={map:'mart',x:3,y:5,dir:'up'};
+LABELS.push({map:'isla',x:10,y:6,w:10,text:'GYM'},{map:'isla',x:5,y:15,w:6,text:'CENTER'},{map:'isla',x:19,y:15,w:6,text:'MART'});
+SIGNS['isla:20,7']='ISLA CARLOS GYM. Leader: QUIZMASTER CARLOS. "Final answer?"';
+SIGNS['isla:16,24']='ISLA CARLOS. Tropical paradise and the trivia capital of the region.';
+WILD.isla=[['labc',26,39,42],['trivia',24,39,42],['sunburn',26,39,42],['pirate',24,39,42]];
+BUS.push({name:'ISLA CARLOS',map:'isla',x:17,y:18});
+ENT.push(busDriver('isla',17,19),
+  Tr('is1','isla',12,22,'right',SPECIES.sunburn.look,'VACATION CARLOS',[['sunburn',41],['surfer',41],['brunch',41]],900,'VACATION CARLOS: I have six days of vacation left and I am spending one of them on you.','VACATION CARLOS: Worth it. Mostly.'),
+  Tr('is2','isla',17,12,'left',SPECIES.pirate.look,'CAPTAIN-ISH CARLOS',[['pirate',42],['pirate',42]],940,'CAPTAIN-ISH CARLOS: Arr! I rented a pedal boat once! Prepare to be boarded!','CAPTAIN-ISH CARLOS: The rental was non-refundable too.'),
+  {map:'isla',x:13,y:25,dir:'right',look:SPECIES.sailor.look,talk:async()=>{
+    if(await yesNo('FERRY CARLOS: Heading back to PUERTO CARLOS?')){ ui.text=null; await warpTo({map:'s4',x:31,y:23,dir:'left'}); }
+  }},
+  npc('isla',8,19,'down',SPECIES.labc.look,'ISLAND CARLOS: QUIZMASTER CARLOS makes you answer trivia to cross his gym. Get one wrong and you have to battle your way through instead.'));
+MAPS.gym7={rows:['XXXXXXXXXXXX','XK________KX','X__________X','XKKKKKKKK_KX','X__________X','XK_KKKKKKKKX','X__________X','XK________KX','XXXXXMMXXXXX']};
+function quiz(id,x,y,q,opts,ans,party){
+  return {id,map:'gym7',x,y,dir:'down',look:SPECIES.trivia.look,still:true,hidden:()=>G.flags[id],talk:async()=>{
+    await say('QUIZ CARLOS: Pop quiz! Get it right and I step aside. Get it wrong and we battle.');
+    setText(q);
+    const a=await menu(opts,{w:120});
+    if(a===ans){ G.flags[id]=true; await say('QUIZ CARLOS: Correct! Ugh. Go on through.'); return; }
+    await say('QUIZ CARLOS: WRONG! Prepare for a battle of wits. And also of Carloses.');
+    const r=await battle({name:'QUIZ CARLOS',party:party.map(([s,l])=>makeMon(s,l)),prize:900,look:SPECIES.trivia.look});
+    if(r==='win'){ G.flags[id]=true; await say('QUIZ CARLOS: Fine. You may pass. But study next time.'); } else await blackout();
+  }};
+}
+ENT.push(
+  quiz('q1',2,5,'Which type beats WEIRD-type Carloses, besides NERD?',['HYPE','REGULAR','CHILL','SNACK'],1,[['coder',42],['chess',42]]),
+  quiz('q2',9,3,'What does LATE CARLOS always say?',['"Be there in 5"','"On my way"','"Who is this?"','"Traffic was fine"'],0,[['labc',43],['trivia',43]]));
+ENT.push(npc('gym7',7,7,'left',LOOKS.guide,'GYM GUIDE CARLOS: Yo, champ! QUIZMASTER CARLOS uses NERD-types. HYPE and FANCY Carloses make them feel very small. Do not bring anything WEIRD or SPOOKY.'));
+ENT.push(Tr('gym7','gym7',5,1,'down',LOOKS.quizm,'QUIZMASTER CARLOS',[['trivia',43],['chess',44],['labc',44],['genius',46]],3600,
+  'QUIZMASTER CARLOS: Welcome to the final round! I am your host, QUIZMASTER CARLOS! The category is: "Things You Are About To Lose". For one badge: what is this battle?',
+  'QUIZMASTER CARLOS: That is... correct. Tell him what he has won!',
+  {noSight:true,after:'QUIZMASTER CARLOS: Thanks for playing! We have some lovely parting gifts. They are also badges. You have one already.',onWin:async()=>{
+    G.badges.push('TRIVIA BADGE'); G.bag.sball=(G.bag.sball||0)+5;
+    await say('You received the TRIVIA BADGE from QUIZMASTER CARLOS!');
+    await say('QUIZMASTER CARLOS also handed you 5 SUPER BALLS.');
+    await say('QUIZMASTER CARLOS: Seven badges! Fun fact: the leader of the CARLOS CITY GYM has finally come back to town. Take the CARLOS BUS.');
+    save(); }}));
+
+// =========================== CARLOS CITY GYM (the 8th) ===========================
+setTile('world',7,16,'D'); for(let x=5;x<=9;x++){ setTile('world',x,14,'v'); setTile('world',x,15,'v'); }
+WARPS['world:7,16']={map:'gym8',x:5,y:8,dir:'up'}; EXITS.gym8={map:'world',x:7,y:17,dir:'down'};
+LABELS.push({map:'world',x:5,y:15,w:5,text:'GYM'});
+ENT.push(npc('world',7,17,'down',LOOKS.towny2,'CITY CARLOS: The CARLOS CITY GYM has been locked for months. The leader is away "on business". Nobody even remembers who it is. Come back with 7 badges, maybe he will be home.',need(7)));
+gymMap('gym8','T','K');
+ENT.push(npc('gym8',7,8,'left',LOOKS.guide,'GYM GUIDE CARLOS: Yo, champ... I have a bad feeling about this one. The leader uses a bit of everything. Bring your best six and a lot of MEGA GULP.'),
+  Tr('gym8a','gym8',5,7,'left',LOOKS.grunt,'GRUNT KARL',[['karl',46],['carl',46],['karl',46]],1200,'GRUNT KARL: Surprised to see us? The boss owns this GYM. Always has.','GRUNT KARL: Not surprised to lose, though.'),
+  Tr('gym8b','gym8',6,4,'right',LOOKS.grunt,'GRUNT KARL',[['carlito',47],['charles',47]],1250,'GRUNT KARL: Last line of defense. No pressure. So much pressure.','GRUNT KARL: I folded under the pressure.'),
+  Tr('gym8','gym8',5,1,'down',LOOKS.boss,'BOSS KARL',[['karl',48],['carl',48],['carlito',49],['charles',49],['evil',51]],5000,
+    'BOSS KARL: We meet again, Carlos. Yes. I am the leader of the CARLOS CITY GYM. I was the FIRST Carlos in this town, before I became Karl. Beat me, and maybe I will remember why I liked the name.',
+    'BOSS KARL: ...You know, "Carlos" does have a nice ring to it.',
+    {noSight:true,after:'LEADER CARLOS: TEAM KARL is finished. I am going back to Carlos. With a C. It feels good.',onWin:async()=>{
+      G.badges.push('ORIGINAL BADGE'); G.bag.sball=(G.bag.sball||0)+5;
+      await say('You received the ORIGINAL BADGE from BOSS KARL!');
+      await say('BOSS KARL: I am disbanding TEAM KARL. And I am changing my name back. Call me... Carlos.');
+      await say('LEADER CARLOS: All eight badges. The guard west of CARLOS CITY will let you onto VICTORY ROAD. The CARLOS LEAGUE is waiting.');
+      save(); }}));
+
+// =========================== VICTORY ROAD + THE CARLOS LEAGUE ===========================
+setTile('world',0,10,','); setTile('world',1,10,',');
+ENT.push(npc('world',1,10,'right',LOOKS.ranger,'LEAGUE GUARD CARLOS: Beyond here is VICTORY ROAD and the CARLOS LEAGUE. Eight badges or no entry. I count them. Every time.',need(8)));
+mkMap('vr',34,20,'R',{dark:true,area:'VICTORY ROAD'},t=>{ t.put(0,10,'E'); t.rect(1,9,5,3,'c'); t.rect(5,10,6,1,'c'); t.rect(10,4,2,7,'c'); t.rect(10,4,12,2,'c');
+  t.rect(20,4,2,12,'c'); t.rect(12,14,10,2,'c'); t.rect(12,14,2,5,'c'); t.rect(4,15,9,3,'c'); t.rect(21,10,10,2,'c'); t.rect(29,6,2,6,'c'); t.rect(29,6,4,2,'c'); t.put(33,7,'E');
+  [[2,9],[15,4],[4,15],[26,10]].forEach(([x,y])=>t.put(x,y,'s')); });
+WARPS['world:0,10']={map:'vr',x:1,y:10,dir:'right'}; WARPS['vr:0,10']={map:'world',x:1,y:10,dir:'right'};
+const LEAGUE_RET={map:'vr',x:32,y:7,dir:'left'};
+WARPS['vr:33,7']={map:'league',x:5,y:36,dir:'up',ret:LEAGUE_RET}; EXITS.league=LEAGUE_RET;
+WILD.vr=[['swole',10,44,47],['snooze',10,44,47],['buffet',10,44,47],['noshow',14,44,47],['streamer',14,44,47],['friday',14,44,47],['phantom',10,44,47],['tuxedo',8,44,47],['charles',6,44,47],['grim',4,45,47]];
+ENT.push(
+  Tr('vr1','vr',10,7,'right',SPECIES.crossfit.look,'ACE CARLOS',[['crossfit',46],['streamer',46],['swole',47]],1400,'ACE CARLOS: Only the best Carloses make it this far. I have been stuck here for a year.','ACE CARLOS: Make that a year and a day.'),
+  Tr('vr2','vr',20,8,'right',SPECIES.wizard.look,'ACE CARLOS',[['wizard',47],['phantom',47],['genius',47]],1450,'ACE CARLOS: I studied every Carlos there is. I have a spreadsheet. You are not on it.','ACE CARLOS: I will add a row.'),
+  Tr('vr3','vr',25,10,'down',SPECIES.tuxedo.look,'ACE CARLOS',[['tuxedo',48],['buffet',48],['snooze',48]],1500,'ACE CARLOS: The LEAGUE is just ahead. I am the last thing between you and it. No big deal.','ACE CARLOS: It was a slightly big deal.'),
+  itemEnt('i5','vr',13,18,{mega:3},'You found 3 MEGA GULP COLAS!'),
+  {map:'vr',x:5,y:16,dir:'down',look:SPECIES.prime.look,still:true,hidden:()=>G.flags.prime,talk:async()=>{
+    await say('A Carlos sits alone in the dark, glowing faintly. Somehow you know: this is the first one.');
+    if(!(await yesNo('Approach CARLOS PRIME?'))) return;
+    const r=await battle({wild:true,boss:true,party:[makeMon('prime',55)]});
+    if(r==='lose'){ await blackout(); return; }
+    if(r==='run') return;
+    G.flags.prime=true;
+    if(r==='win') await say('CARLOS PRIME nodded once and faded into the dark.');
+  }});
+mkMap('league',12,38,'X',{area:'CARLOS LEAGUE'},t=>{ t.rect(1,1,10,36,'_'); [30,24,18,12,6].forEach(y=>{ t.rect(1,y,10,1,'X'); t.put(5,y,'_'); });
+  t.put(5,37,'M'); t.put(6,37,'M'); t.put(1,31,'H'); t.put(10,31,'P'); t.put(1,36,'p'); t.put(10,36,'p');
+  [25,19,13,7].forEach(y=>{ t.put(1,y,'p'); t.put(10,y,'p'); }); t.put(1,1,'K'); t.put(10,1,'K'); });
+BUS.push({name:'CARLOS LEAGUE',map:'league',x:5,y:35,ret:LEAGUE_RET});
+function elite(id,y,look,name,party,prize,intro,outro,extra){
+  const e=Tr(id,'league',5,y,'down',look,name,party,prize,intro,outro,Object.assign({noSight:true},extra||{}));
+  e.hidden=()=>G.beaten[id]; e.still=true; return e;
+}
+ENT.push(
+  {map:'league',x:2,y:32,dir:'down',look:LOOKS.nurse,talk:async()=>{
+    await say('NURSE CARLOS: Welcome to the CARLOS LEAGUE. Let me patch up your Carloses before you go in.');
+    await fadeTo(.7); await sleep(500); healAll(); await fadeTo(0);
+    G.heal={map:'league',x:3,y:33,ret:LEAGUE_RET};
+    await say('NURSE CARLOS: All better. Four elite Carloses and a champion are waiting. Good luck!'); save();
+  }},
+  {map:'league',x:9,y:32,dir:'down',look:LOOKS.clerk,talk:shop},
+  elite('e1',30,LOOKS.chef,'CHEF CARLOS',[['bbq',50],['sushi',50],['brunch',51],['buffet',52]],4000,
+    'CHEF CARLOS: First of the ELITE FOUR. I am CHEF CARLOS. Tonight\'s tasting menu is five courses of defeat. You are the amuse-bouche.','CHEF CARLOS: My compliments to the challenger.'),
+  elite('e2',24,LOOKS.doctor,'DR. CARLOS',[['chess',51],['labc',51],['trivia',52],['genius',53]],4200,
+    'DR. CARLOS: Second of the ELITE FOUR. DR. CARLOS. Not that kind of doctor. I have a PhD in beating you.','DR. CARLOS: My thesis has been refuted.'),
+  elite('e3',18,LOOKS.count,'COUNT CARLOS',[['vampire',52],['zombie',52],['grim',53],['phantom',54]],4400,
+    'COUNT CARLOS: Good evening. I am COUNT CARLOS, third of the ELITE FOUR. I have waited four hundred years for a worthy opponent. Or since lunch. Time is strange in here.','COUNT CARLOS: At last... I may rest. Until dinner.'),
+  elite('e4',12,LOOKS.don,'DON CARLOS',[['wine',53],['charles',54],['tuxedo',55],['tuxedo',56]],4600,
+    'DON CARLOS: You have come far. I am DON CARLOS, last of the ELITE FOUR. I have made many Carloses an offer. None have refused. Sit. Battle.','DON CARLOS: You have my respect. That is not given lightly.'),
+  elite('champ',6,LOOKS.champ,'CHAMPION CARLOS',()=>[['noshow',55],['wizard',55],['crossfit',56],['phantom',56],[EVOLVED[G.flags.rival]||'swole',58]],8000,
+    "CHAMPION CARLOS: Carlos! Took you long enough. That's right. Your old rival got here first. I am the CARLOS LEAGUE CHAMPION! One last time: let's find out whose Carlos is the most Carlos!",
+    'RIVAL CARLOS: No way... After all that? ...Fine. You earned it, Carlos. You really are the most Carlos.'),
+  {map:'league',x:5,y:2,dir:'down',look:LOOKS.prof,talk:async()=>{
+    if(G.flags.champion){ await say('PROF. CARLOS: Our champion! There are still Carloses out there to catch. I hear something is glowing deep in VICTORY ROAD...'); return; }
+    G.flags.champion=true; healAll();
+    await say('PROF. CARLOS: Carlos! I came as soon as I heard. You did it. You beat the ELITE FOUR and the champion!');
+    await say('PROF. CARLOS: When you left CARLOSVILLE with one little Carlos, I never imagined this. Well, I did. I just did not say so.');
+    await say('PROF. CARLOS: Welcome to the HALL OF FAME, where your name will be remembered forever. It will be easy to remember. It is Carlos.');
+    await say(`HALL OF FAME: ${G.party.map(nm).join(', ')}.`);
+    await say('Congratulations! You are the CARLOS LEAGUE CHAMPION!');
+    await say('THE END. Thanks for playing CARLOS VERSION. Gotta Carlos them all.');
+    save();
+  }});
+MAPS.cave.dark=true;
+Object.assign(MAPS.gym3,{area:'PUERTO CARLOS GYM'}); Object.assign(MAPS.gym4,{area:'GRAN CARLOS GYM'}); Object.assign(MAPS.gym5,{area:'CARLOS PARK GYM'});
+Object.assign(MAPS.gym6,{area:'CARLOS CENTRAL GYM'}); Object.assign(MAPS.gym7,{area:'ISLA CARLOS GYM'}); Object.assign(MAPS.gym8,{area:'CARLOS CITY GYM'});
+
+/* =====================================================================
+   MUSIC: chiptune made live with the Web Audio API (no audio files).
+   Each song = chords (one per bar) + a lead melody. Bass, arpeggio and
+   drums are generated from the chords. Notes are "NAME:LENGTH" where
+   length is in 16th notes, and "-" is a rest. 16 steps = one bar.
+   ===================================================================== */
+const SONGS={
+  title:{bpm:120,chords:['C','G','Am','F','C','G','F','G'],bass:'eighth',arp:2,drums:'march',lead:`
+    G4:4 C5:4 E5:4 G5:4   F5:2 E5:2 D5:4 B4:4 D5:4   C5:4 E5:4 A5:6 G5:2   F5:4 A5:4 G5:2 F5:2 E5:4
+    G4:4 C5:4 E5:4 G5:4   A5:2 G5:2 F5:4 D5:8        F5:4 E5:2 F5:2 A5:4 C6:4   B5:4 A5:4 G5:8`},
+  town:{bpm:104,chords:['G','D','Em','C','G','D','C','D'],bass:'bounce',arp:4,drums:'soft',lead:`
+    B4:4 D5:4 G5:6 F#5:2   F#5:4 E5:2 D5:2 A4:8   G4:4 B4:4 E5:6 D5:2   E5:4 G5:4 E5:4 C5:4
+    B4:4 D5:4 G5:6 A5:2    A5:4 F#5:4 D5:8        E5:2 G5:2 C6:4 B5:4 G5:4   A5:6 F#5:2 D5:8`},
+  inside:{bpm:100,chords:['C','Am','F','G','C','Am','F','G'],bass:'bounce',arp:4,drums:'none',lead:`
+    E5:4 G5:4 C6:8   C6:4 A5:4 E5:8   F5:4 A5:4 C6:6 A5:2   G5:4 D5:4 G5:8
+    E5:4 G5:4 C6:4 E6:4   E6:4 C6:4 A5:8   A5:2 C6:2 F6:4 E6:4 C6:4   D6:6 B5:2 G5:8`},
+  route:{bpm:138,chords:['D','A','Bm','G','D','A','G','A'],bass:'eighth',arp:2,drums:'march',lead:`
+    D5:2 -:1 D5:1 F#5:2 A5:2 D6:4 A5:4    C#6:2 -:1 C#6:1 A5:2 E5:2 A5:8   B5:2 -:1 B5:1 D6:2 F#6:2 D6:4 B5:4   G5:2 A5:2 B5:4 D6:4 B5:4
+    D5:2 -:1 D5:1 F#5:2 A5:2 D6:4 F#6:4   E6:4 C#6:4 A5:4 E5:4             G5:2 B5:2 D6:4 G6:4 F#6:2 E6:2       E6:4 C#6:2 A5:2 A5:8`},
+  city:{bpm:124,chords:['F','Dm','Bb','C','F','Dm','Gm','C'],bass:'eighth',arp:2,drums:'rock',lead:`
+    A4:2 C5:2 F5:2 A5:2 G5:2 F5:2 C5:4   F5:2 E5:2 D5:4 A4:4 D5:4   D5:2 F5:2 Bb5:2 D6:2 C6:2 Bb5:2 F5:4   E5:2 G5:2 C6:4 Bb5:2 G5:2 E5:4
+    A4:2 C5:2 F5:2 A5:2 C6:4 A5:4        A5:2 F5:2 D5:4 F5:4 A5:4   G5:2 Bb5:2 D6:4 Bb5:2 G5:2 D5:4        C5:2 E5:2 G5:2 Bb5:2 C6:8`},
+  port:{bpm:112,chords:['C','F','G','C','Am','F','G','G'],bass:'calypso',arp:0,drums:'calypso',lead:`
+    E5:3 G5:3 E5:2 C5:3 E5:3 G5:2   A5:3 F5:3 A5:2 C6:3 A5:3 F5:2   B5:3 G5:3 D5:2 G5:3 B5:3 D6:2   C6:3 G5:3 E5:2 C5:8
+    A5:3 E5:3 C5:2 E5:3 A5:3 C6:2   A5:3 F5:3 C5:2 F5:3 A5:3 F5:2   G5:3 B5:3 D6:2 B5:3 G5:3 D5:2   G5:3 A5:3 B5:2 D6:8`},
+  spooky:{bpm:84,chords:['Am','F','Dm','E','Am','F','E','E'],bass:'long',arp:4,drums:'spooky',wave:'sawtooth',lead:`
+    E5:6 C5:2 A4:8   F5:6 C5:2 A4:8   D5:4 F5:4 A5:8   G#5:6 E5:2 B4:8
+    E5:2 -:2 E5:2 C5:2 A4:8   F5:2 -:2 F5:2 C5:2 A4:8   E5:4 G#5:4 B5:4 G#5:4   E5:8 -:8`},
+  cave:{bpm:96,chords:['Em','Em','C','D','Em','Em','C','B'],bass:'long',arp:4,drums:'spooky',wave:'triangle',lead:`
+    E4:4 G4:4 B4:8   -:4 B4:2 G4:2 E4:8   C5:4 G4:4 E4:8   D5:4 A4:4 F#4:8
+    E4:4 G4:4 B4:4 E5:4   D5:2 B4:2 G4:4 E4:8   C5:4 E5:4 G5:8   F#5:4 D#5:4 B4:8`},
+  gym:{bpm:132,chords:['Am','Am','F','G','Am','Am','F','E'],bass:'eighth',arp:2,drums:'rock',lead:`
+    A4:2 C5:2 E5:2 A5:2 E5:2 C5:2 A4:4   A4:2 C5:2 E5:2 A5:2 B5:2 C6:2 A5:4   F5:2 A5:2 C6:4 A5:2 F5:2 C5:4   G5:2 B5:2 D6:4 B5:2 G5:2 D5:4
+    A5:4 E5:2 A5:2 C6:4 A5:4             B5:2 C6:2 B5:2 A5:2 E5:8             F5:2 A5:2 C6:2 F6:2 E6:4 C6:4   B5:4 G#5:4 E5:8`},
+  wild:{bpm:164,chords:['Em','C','D','Em','Em','C','D','B'],bass:'eighth',arp:1,drums:'fast',lead:`
+    E5:1 -:1 E5:1 -:1 G5:2 B5:2 E6:4 B5:4        C6:2 G5:2 E5:2 G5:2 C6:4 E6:4   D6:2 A5:2 F#5:2 A5:2 D6:4 F#6:4   E6:2 D6:2 B5:2 G5:2 E5:8
+    E5:1 -:1 E5:1 -:1 G5:2 B5:2 E6:2 G6:2 E6:4   E6:2 C6:2 G5:2 C6:2 E6:4 G6:4   F#6:2 D6:2 A5:2 D6:2 F#6:4 A6:4   F#6:4 D#6:4 B5:8`},
+  trainer:{bpm:172,chords:['Dm','Bb','C','Dm','Dm','Bb','C','A'],bass:'eighth',arp:1,drums:'fast',lead:`
+    D5:2 F5:2 A5:2 D6:2 A5:2 F5:2 D5:4       D5:2 F5:2 Bb5:2 D6:2 F6:4 D6:4    E6:2 C6:2 G5:2 C6:2 E6:4 G6:4   F6:2 E6:2 D6:4 A5:8
+    A5:1 -:1 A5:1 -:1 D6:2 F6:2 A6:4 F6:4    F6:2 D6:2 Bb5:2 D6:2 F6:4 Bb6:4   G6:2 E6:2 C6:2 E6:2 G6:4 E6:4   E6:4 C#6:4 A5:8`},
+  leader:{bpm:180,chords:['Cm','Ab','Bb','Cm','Cm','Ab','Bb','G'],bass:'eighth',arp:1,drums:'fast',lead:`
+    C5:2 Eb5:2 G5:2 C6:2 Eb6:4 C6:4          Eb6:2 C6:2 Ab5:2 C6:2 Eb6:4 Ab6:4   F6:2 D6:2 Bb5:2 D6:2 F6:4 Bb6:4   G6:2 F6:2 Eb6:4 C6:8
+    G5:1 -:1 G5:1 -:1 C6:2 Eb6:2 G6:4 Eb6:4  Ab6:4 Eb6:2 C6:2 Ab5:4 C6:4         Bb6:4 F6:2 D6:2 Bb5:4 D6:4        D6:4 B5:4 G5:8`},
+  league:{bpm:116,chords:['C','Em','F','G','Am','Em','F','G'],bass:'eighth',arp:2,drums:'march',lead:`
+    C5:6 E5:2 G5:8   B5:6 G5:2 E5:8   A5:4 C6:4 A5:4 F5:4   G5:4 B5:4 D6:8
+    E6:6 C6:2 A5:8   G5:4 B5:4 E6:8   F6:4 E6:2 D6:2 C6:4 A5:4   B5:4 D6:4 G6:8`},
+};
+const JINGLES={
+  heal:{bpm:150,lead:'E5:2 G5:2 E5:2 G5:2 C6:2 E6:2 G6:4'},
+  win:{bpm:150,lead:'C5:2 E5:2 G5:2 C6:2 B5:2 G5:2 C6:6'},
+  catch:{bpm:160,lead:'G5:2 C6:2 E6:2 C6:2 E6:2 G6:6'},
+  level:{bpm:170,lead:'C6:1 E6:1 G6:1 C7:3'},
+  badge:{bpm:140,lead:'C5:2 G5:2 C6:2 E6:4 D6:2 E6:2 G6:8'},
+};
+// ---- Instruments. Each is a recipe: oscillator layers [wave, pitch ratio, level, detune cents],
+// an envelope (a=attack, d=decay, s=sustain level, r=release; s:0 means it rings out like a bell),
+// an optional filter (with a sweep from env[0] to env[1] Hz over env[2] seconds), vibrato and echo.
+// Custom waves: p12/p25 are thin and medium NES-style pulses, bell/organ/epiano/steel are additive tones.
+const INST={
+  p12:      {L:[['p12']],a:.003,d:.08,s:.6,r:.04,v:.75},
+  p25:      {L:[['p25']],a:.004,d:.1,s:.7,r:.06,v:.75,vib:[5.5,12,.15]},
+  pluck:    {L:[['p25']],a:.002,d:.16,s:0,r:.05,v:.7,f:{freq:2400,env:[5000,700,.18]}},
+  pluckSoft:{L:[['triangle'],['sine',2,.3]],a:.002,d:.3,s:0,r:.1,v:1.4},
+  flute:    {L:[['triangle'],['sine',2,.25]],a:.04,d:.2,s:.8,r:.12,v:1.5,vib:[5,16,.18],f:{freq:3200}},
+  bell:     {L:[['sine'],['sine',2.76,.35],['sine',5.4,.12]],a:.002,d:.9,s:0,r:.2,v:1.1},
+  musicbox: {L:[['sine'],['sine',4,.25],['sine',2,.15]],a:.002,d:.7,s:0,r:.2,v:1.3},
+  organ:    {L:[['organ']],a:.01,d:.1,s:.9,r:.06,v:.8},
+  epiano:   {L:[['epiano']],a:.003,d:.7,s:.25,r:.2,v:1.2},
+  steel:    {L:[['steel']],a:.002,d:.45,s:.08,r:.12,v:1.1},
+  brass:    {L:[['sawtooth',1,1,-7],['sawtooth',1,1,7]],a:.03,d:.15,s:.75,r:.1,v:.42,vib:[5,10,.22],f:{freq:2000,q:1,env:[700,2600,.08]}},
+  sawLead:  {L:[['sawtooth',1,1,-6],['square',1,.6,6]],a:.005,d:.1,s:.8,r:.05,v:.9,f:{freq:2800,q:3}},
+  strings:  {L:[['sawtooth',1,1,-11],['sawtooth',1,1,11]],a:.18,d:.3,s:.85,r:.35,v:.34,vib:[4.5,8,.3],f:{freq:1500}},
+  softPad:  {L:[['triangle',1,1,-6],['sine',1,1,6]],a:.25,d:.4,s:.8,r:.5,v:1.2},
+  darkPad:  {L:[['sawtooth',1,1,-14],['sawtooth',.5,.6,10]],a:.45,d:.6,s:.8,r:.9,v:.5,f:{freq:480,q:4}},
+  theremin: {L:[['sine'],['triangle',2,.15]],a:.09,d:.2,s:.9,r:.28,v:1.6,vib:[6,38,.05],glide:.08},
+  darkBell: {L:[['sine'],['sine',2.76,.25],['triangle',.5,.4]],a:.004,d:1.3,s:0,r:.3,v:1.3,f:{freq:1300}},
+  darkPluck:{L:[['sawtooth']],a:.002,d:.35,s:0,r:.1,v:.55,f:{freq:900,q:6,env:[1600,300,.3]}},
+  tri:      {L:[['triangle']],a:.005,d:.1,s:.85,r:.05,v:1.0},
+  sub:      {L:[['sine'],['triangle',2,.15]],a:.02,d:.2,s:.9,r:.15,v:1.25},
+  sawBass:  {L:[['sawtooth'],['square',.5,.4]],a:.004,d:.14,s:.55,r:.05,v:1.5,f:{freq:650,q:6,env:[2000,450,.14]}},
+  pulseBass:{L:[['p25'],['triangle',1,.8]],a:.003,d:.1,s:.7,r:.04,v:1.1,f:{freq:1300}},
+};
+// Who plays what in each track. Roles: lead, dbl (lead doubled [instrument, semitones]), arp, pad (held chords), bass, kit (drums).
+const VOICES={
+  title:  {mg:1.22,lead:'brass',    dbl:['p25',-12],    arp:'pluck',     pad:'strings', bass:'tri',      kit:'chip',  echo:[.24,.22,.18]},
+  town:   {mg:1.16,lead:'flute',                        arp:'bell',      pad:'softPad', bass:'tri',      kit:'soft',  echo:[.3,.2,.16]},
+  inside: {mg:1.44,lead:'musicbox',                     arp:'pluckSoft', pad:'softPad', bass:'sub',      kit:'none',  echo:[.28,.18,.14]},
+  route:  {mg:1.1,lead:'p25',      dbl:['flute',-12],  arp:'p12',                      bass:'tri',      kit:'chip'},
+  city:   {mg:1.17,lead:'epiano',   dbl:['organ',-12],  arp:'pluck',     pad:'organ',   bass:'sawBass',  kit:'heavy'},
+  port:   {mg:1.11,lead:'steel',                        arp:'pluckSoft', pad:'softPad', bass:'tri',      kit:'shaker',echo:[.2,.15,.12]},
+  spooky: {mg:.94,lead:'theremin',                     arp:'darkBell',  pad:'darkPad', bass:'sub',      kit:'tribal',echo:[.36,.45,.32]},
+  cave:   {mg:1.47,lead:'darkBell',                     arp:'darkPluck', pad:'darkPad', bass:'sub',      kit:'tribal',echo:[.42,.5,.38]},
+  gym:    {mg:1.65,lead:'sawLead',  dbl:['p25',-12],    arp:'p12',                      bass:'sawBass',  kit:'heavy'},
+  wild:   {mg:1.75,lead:'p25',      dbl:['sawLead',-12],arp:'p12',                      bass:'pulseBass',kit:'chip'},
+  trainer:{mg:1.6,lead:'sawLead',  dbl:['p12',12],     arp:'p12',                      bass:'sawBass',  kit:'heavy'},
+  leader: {mg:1.65,lead:'brass',    dbl:['sawLead',-12],arp:'p12',       pad:'strings', bass:'sawBass',  kit:'heavy', echo:[.16,.15,.12]},
+  league: {mg:1.21,lead:'brass',    dbl:['strings',-12],arp:'bell',      pad:'strings', bass:'tri',      kit:'chip',  echo:[.3,.25,.2]},
+};
+const ROLE_VOL={lead:.085,dbl:.04,arp:.03,pad:.022,bass:.17};
+const TOWN_MUSIC={'CARLOS CITY':'city','GRAN CARLOS':'city','CARLOS CENTRAL':'city','PUERTO CARLOS':'port','ISLA CARLOS':'port','CARLOS HOLLOW':'spooky'};
+const DRUMS={rock:'k-h-s-h-k-k-s-h-',fast:'k-hks-h-k-kks-hh',soft:'k---h---k---h---',march:'k-h-s-hhk-h-s-s-',none:'----------------',spooky:'k-------h-----h-',calypso:'k--h-ks--h-k-s-h'};
+
+const VOLS=[0,.3,.55,.85], VOL_NAMES=['OFF','LOW','MED','HIGH'], MUSIC_LEVEL=.5;
+const AU={ctx:null,master:null,music:null,sfx:null,vol:2,on:true,cur:null,song:null,step:0,next:0,noise:null,built:{},badges:-1,waves:{},override:undefined};
+try{ const v=localStorage.getItem('carlos-music'); AU.vol=v==='off'?0:/^[0-3]$/.test(v||'')?+v:2; AU.on=AU.vol>0; }catch(e){}
+const SEMI={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+function midi(n){ const m=/^([A-G])([#b]?)(\d)$/.exec(n); if(!m) throw new Error('bad note '+n); return 12*(+m[3]+1)+SEMI[m[1]]+(m[2]==='#'?1:m[2]==='b'?-1:0); }
+const hz=m=>440*Math.pow(2,(m-69)/12);
+function chordTones(c){ const m=/^([A-G][#b]?)(m?)$/.exec(c); const r=midi(m[1]+'2'); return [r,r+(m[2]?3:4),r+7]; }
+function parseLead(str){
+  const out=[]; let t=0;
+  for(const tok of str.trim().split(/\s+/)){ const [n,l]=tok.split(':'); if(n!=='-') out.push({at:t,m:midi(n),d:+l}); t+=+l; }
+  return {notes:out,len:t};
+}
+function wave(name){
+  if(AU.waves[name]) return AU.waves[name];
+  const N=32, re=new Float32Array(N), im=new Float32Array(N);
+  const duty={p12:.125,p25:.25}[name];
+  const add={organ:[0,1,.5,.25,.3,0,.12,0,.1],epiano:[0,1,.35,.1,.06],steel:[0,1,.55,.35,.2,.12,.06]}[name];
+  for(let n=1;n<N;n++){
+    if(duty) re[n]=(2/(n*Math.PI))*Math.sin(n*Math.PI*duty);
+    else if(add) im[n]=add[n]||0;
+  }
+  return AU.waves[name]=AU.ctx.createPeriodicWave(re,im);
+}
+function playNote(name,f,t,dur,vol,dest){
+  const I=INST[name]||INST.p25, c=AU.ctx;
+  const a=I.a||.005, d=I.d||.1, s=I.s===undefined?.7:I.s, r=I.r||.05, v=vol*(I.v||1);
+  const end=s===0?t+a+d:t+Math.max(dur,a+.02), stop=end+r+.03;
+  const out=c.createGain(), g=out.gain;
+  g.setValueAtTime(0,t); g.linearRampToValueAtTime(v,t+a);
+  if(s===0) g.linearRampToValueAtTime(0,end);
+  else { const dEnd=Math.min(t+a+d,end); g.linearRampToValueAtTime(v*(s+(1-s)*Math.max(0,1-(dEnd-t-a)/d)),dEnd); g.setValueAtTime(v*s,end); g.linearRampToValueAtTime(0,end+r); }
+  out.connect(dest);
+  let inp=out;
+  if(I.f){
+    const fl=c.createBiquadFilter(); fl.type=I.f.type||'lowpass'; fl.Q.value=I.f.q||.7;
+    if(I.f.env){ fl.frequency.setValueAtTime(I.f.env[0],t); fl.frequency.exponentialRampToValueAtTime(I.f.env[1],t+I.f.env[2]); }
+    else fl.frequency.value=I.f.freq;
+    fl.connect(out); inp=fl;
+  }
+  let lfoG=null;
+  if(I.vib){
+    const lfo=c.createOscillator(); lfo.frequency.value=I.vib[0];
+    lfoG=c.createGain(); lfoG.gain.setValueAtTime(0,t); lfoG.gain.linearRampToValueAtTime(I.vib[1],t+I.vib[2]+.12);
+    lfo.connect(lfoG); lfo.start(t); lfo.stop(stop);
+  }
+  for(const [w,ratio=1,lv=1,cents=0] of I.L){
+    const o=c.createOscillator(), og=c.createGain();
+    if(w==='p12'||w==='p25'||w==='organ'||w==='epiano'||w==='steel') o.setPeriodicWave(wave(w)); else o.type=w;
+    const fr=f*ratio;
+    if(I.glide){ o.frequency.setValueAtTime(fr*.94,t); o.frequency.exponentialRampToValueAtTime(fr,t+I.glide); } else o.frequency.value=fr;
+    o.detune.value=cents; if(lfoG) lfoG.connect(o.detune);
+    og.gain.value=lv/I.L.length; o.connect(og); og.connect(inp);
+    o.start(t); o.stop(stop);
+  }
+}
+// ---- Drum kits. Patterns use k (kick), s (snare), h (hat). Each kit gives them its own sound.
+function noiseHit(t,dest,vol,len,type,freq,q){
+  const c=AU.ctx, src=c.createBufferSource(), g=c.createGain(), f=c.createBiquadFilter();
+  src.buffer=AU.noise; f.type=type; f.frequency.value=freq; if(q) f.Q.value=q;
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+len);
+  src.connect(f); f.connect(g); g.connect(dest); src.start(t); src.stop(t+len+.02);
+}
+function toneHit(t,dest,vol,f0,f1,len,type){
+  const c=AU.ctx, o=c.createOscillator(), g=c.createGain(); o.type=type||'sine';
+  o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(f1,t+len*.8);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+len);
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t+len+.02);
+}
+const KITS={
+  chip:  {k:(t,d)=>toneHit(t,d,.28,150,45,.12), s:(t,d)=>noiseHit(t,d,.11,.11,'highpass',1400), h:(t,d)=>noiseHit(t,d,.045,.035,'highpass',6500)},
+  soft:  {k:(t,d)=>toneHit(t,d,.18,110,50,.15), s:(t,d)=>noiseHit(t,d,.035,.18,'bandpass',3000,.8), h:(t,d)=>noiseHit(t,d,.02,.05,'highpass',8000)},
+  heavy: {k:(t,d)=>{ toneHit(t,d,.34,170,40,.16); noiseHit(t,d,.05,.02,'lowpass',2000); },
+          s:(t,d)=>{ noiseHit(t,d,.13,.14,'bandpass',1800,.7); toneHit(t,d,.08,220,160,.08,'triangle'); },
+          h:(t,d)=>noiseHit(t,d,.05,.05,'highpass',7000)},
+  tribal:{k:(t,d)=>toneHit(t,d,.3,95,48,.35), s:(t,d)=>toneHit(t,d,.16,210,120,.22), h:(t,d)=>noiseHit(t,d,.03,.08,'bandpass',5000,2)},
+  shaker:{k:(t,d)=>toneHit(t,d,.2,120,55,.14), s:(t,d)=>{ toneHit(t,d,.08,520,480,.1,'triangle'); noiseHit(t,d,.04,.06,'bandpass',4000,1); }, h:(t,d)=>noiseHit(t,d,.045,.06,'bandpass',6000,1.5)},
+  none:{},
+};
+function buildSong(name){
+  const s=SONGS[name], V=VOICES[name]||VOICES.route, steps=s.chords.length*16, ev=[], mg=V.mg||1, RV={}; for(const k in ROLE_VOL) RV[k]=ROLE_VOL[k]*mg;
+  for(let i=0;i<steps;i++) ev.push([]);
+  const lead=parseLead(s.lead);
+  if(lead.len!==steps) console.error(`song ${name}: lead is ${lead.len} steps, expected ${steps}`);
+  for(const n of lead.notes){
+    ev[n.at%steps].push({i:V.lead,f:hz(n.m),d:n.d,v:RV.lead});
+    if(V.dbl) ev[n.at%steps].push({i:V.dbl[0],f:hz(n.m+V.dbl[1]),d:n.d,v:RV.dbl});
+  }
+  const bi=V.bass, bv=RV.bass;
+  s.chords.forEach((c,b)=>{
+    const [r,th,fi]=chordTones(c), o=b*16;
+    if(s.bass==='eighth') for(let i=0;i<8;i++) ev[o+i*2].push({i:bi,f:hz(i%4===3?fi:r),d:2,v:bv});
+    else if(s.bass==='bounce') for(let i=0;i<4;i++) ev[o+i*4].push({i:bi,f:hz(i%2?fi:r),d:3,v:bv});
+    else if(s.bass==='long') ev[o].push({i:bi,f:hz(r),d:16,v:bv});
+    else if(s.bass==='calypso') [[0,r,3],[3,fi,3],[6,r+12,2],[8,r,3],[11,fi,3],[14,th+12,2]].forEach(([p,n,d])=>ev[o+p].push({i:bi,f:hz(n),d,v:bv}));
+    if(V.arp&&s.arp){ const tones=[r+24,th+24,fi+24,th+24]; for(let i=0;i<16;i+=s.arp) ev[o+i].push({i:V.arp,f:hz(tones[(i/s.arp)%4]),d:s.arp,v:RV.arp}); }
+    if(V.pad) for(const n of [r+24,th+24,fi+24]) ev[o].push({i:V.pad,f:hz(n),d:16,v:RV.pad});
+    const dp=DRUMS[s.drums||'none']; for(let i=0;i<16;i++) if(dp[i]!=='-') ev[o+i].push({drum:dp[i],kit:V.kit});
+  });
+  return {ev,steps,stepDur:60/s.bpm/4,echo:V.echo};
+}
+const KIT_VOL={tribal:.72,heavy:.85};
+function playEvent(e,t,sd,dest){
+  if(e.drum){ const k=KITS[e.kit||'chip']; if(k&&k[e.drum]){ const kv=KIT_VOL[e.kit]; if(kv){ const g=AU.ctx.createGain(); g.gain.value=kv; g.connect(dest); k[e.drum](t,g); } else k[e.drum](t,dest); } return; }
+  playNote(e.i,e.f,t,e.d*sd,e.v,dest);
+}
+function initAudio(){
+  if(AU.ctx){ if(AU.ctx.state==='suspended') AU.ctx.resume(); return; }
+  const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+  try{
+    AU.ctx=new C();
+    AU.master=AU.ctx.createGain(); AU.master.gain.value=VOLS[AU.vol];
+    const comp=AU.ctx.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=4; comp.attack.value=.005; comp.release.value=.2;
+    AU.master.connect(comp); comp.connect(AU.ctx.destination);
+    AU.music=AU.ctx.createGain(); AU.music.gain.value=MUSIC_LEVEL; AU.music.connect(AU.master);
+    AU.sfx=AU.ctx.createGain(); AU.sfx.gain.value=1; AU.sfx.connect(AU.master);
+    const buf=AU.ctx.createBuffer(1,AU.ctx.sampleRate*.5,AU.ctx.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    AU.noise=buf;
+    for(const k in SONGS) AU.built[k]=buildSong(k);
+    setInterval(musicTick,30);
+  }catch(e){ console.error(e); AU.ctx=null; }
+}
+function musicTick(){
+  if(!AU.ctx||!AU.song||!AU.tg||AU.ctx.state!=='running') return;
+  const now=AU.ctx.currentTime;
+  if(AU.next<now-.25) AU.next=now+.05;
+  while(AU.next<now+.15){
+    for(const e of AU.song.ev[AU.step]) playEvent(e,AU.next,AU.song.stepDur,AU.tg);
+    AU.next+=AU.song.stepDur; AU.step=(AU.step+1)%AU.song.steps;
+  }
+}
+// Each track gets its own little mixer (with optional echo), so the old one can be cut off cleanly on a switch.
+function setTrack(name){
+  if(!AU.ctx||name===AU.cur) return;
+  const c=AU.ctx, now=c.currentTime;
+  if(AU.tgOut){ const old=AU.tgOut; old.gain.cancelScheduledValues(now); old.gain.setValueAtTime(old.gain.value,now); old.gain.linearRampToValueAtTime(0,now+.04); setTimeout(()=>{ try{ old.disconnect(); }catch(e){} },300); }
+  AU.tg=c.createGain(); AU.tgOut=c.createGain(); AU.tg.connect(AU.tgOut); AU.tgOut.connect(AU.music);
+  AU.cur=name; AU.song=name?AU.built[name]:null; AU.step=0; AU.next=now+.1;
+  const e=AU.song&&AU.song.echo;
+  if(e){
+    const dl=c.createDelay(1), fb=c.createGain(), lp=c.createBiquadFilter(), wet=c.createGain();
+    dl.delayTime.value=e[0]; fb.gain.value=e[1]; lp.type='lowpass'; lp.frequency.value=2200; wet.gain.value=e[2];
+    AU.tg.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(AU.tgOut);
+  }
+}
+function jingle(name){
+  if(!AU.ctx||AU.ctx.state!=='running') return;
+  const j=JINGLES[name], sd=60/j.bpm/4, now=AU.ctx.currentTime+.03, p=parseLead(j.lead);
+  p.notes.forEach(n=>{
+    const t=now+n.at*sd;
+    playNote('brass',hz(n.m),t,n.d*sd,.11,AU.master);
+    playNote('p25',hz(n.m+12),t,n.d*sd,.035,AU.master);
+    playNote('tri',hz(n.m-12),t,n.d*sd,.16,AU.master);
+  });
+  const last=p.notes[p.notes.length-1]; playNote('bell',hz(last.m+12),now+last.at*sd,.5,.05,AU.master);
+  AU.music.gain.cancelScheduledValues(now); AU.music.gain.setValueAtTime(MUSIC_LEVEL*.3,now); AU.music.gain.setValueAtTime(MUSIC_LEVEL,now+p.len*sd+.15);
+}
+function wantedTrack(){
+  if(AU.override!==undefined) return AU.override;
+  if(scene==='title') return 'title';
+  if(scene==='battle'&&B) return B.music||'wild';
+  if(!G) return null;
+  const m=G.map;
+  if(/^gym/.test(m)||m==='hq') return 'gym';
+  if(m==='cave'||m==='vr') return 'cave';
+  if(m==='tower') return 'spooky';
+  if(m==='league') return 'league';
+  if(!MAPS[m].outside) return 'inside';
+  const a=areaName();
+  if(/ROUTE|SAFARI/.test(a)) return 'route';
+  return TOWN_MUSIC[a]||'town';
+}
+function updateMusic(){
+  if(!AU.ctx) return;
+  setTrack(wantedTrack());
+  if(G){ if(AU.badges>=0&&G.badges.length>AU.badges) jingle('badge'); AU.badges=G.badges.length; }
+}
+function toggleMusic(){
+  AU.vol=(AU.vol+1)%VOLS.length; AU.on=AU.vol>0; initAudio();
+  if(AU.master) AU.master.gain.value=VOLS[AU.vol];
+  try{ localStorage.setItem('carlos-music',String(AU.vol)); }catch(e){}
+  musicLabel(); sfx('ok');
+}
+function musicLabel(){ const b=document.getElementById('mus'); if(b) b.textContent='\u266A Sound: '+VOL_NAMES[AU.vol]; }
+
+// ---- sound effects: short synthesized blips, sweeps and noise bursts
+function beep(wave,f0,f1,dur,vol,delay){
+  const c=AU.ctx, t=c.currentTime+.01+(delay||0), o=c.createOscillator(), g=c.createGain();
+  o.type=wave; o.frequency.setValueAtTime(f0,t); if(f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g); g.connect(AU.sfx); o.start(t); o.stop(t+dur+.02);
+}
+function burst(dur,vol,freq,type,delay){
+  const c=AU.ctx, t=c.currentTime+.01+(delay||0), src=c.createBufferSource(), g=c.createGain(), f=c.createBiquadFilter();
+  src.buffer=AU.noise; src.loop=true; f.type=type||'highpass'; f.frequency.value=freq;
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  src.connect(f); f.connect(g); g.connect(AU.sfx); src.start(t); src.stop(t+dur+.02);
+}
+// what each type's attack sounds like as it launches
+const ATK_SFX={
+  HYPE:   ()=>{ beep('square',220,880,.16,.12); beep('square',330,1320,.16,.07,.03); },
+  SNACK:  ()=>{ burst(.05,.16,2500); burst(.05,.16,3000,'highpass',.07); burst(.07,.16,2000,'highpass',.14); },
+  CHILL:  ()=>{ beep('sine',700,260,.3,.16); beep('triangle',520,200,.3,.08,.05); },
+  REGULAR:()=>{ beep('square',300,200,.09,.11); burst(.06,.1,900,'bandpass',.04); },
+  WEIRD:  ()=>{ beep('sawtooth',200,900,.1,.08); beep('sawtooth',900,150,.12,.08,.1); beep('square',1400,400,.08,.05,.2); },
+  NERD:   ()=>{ for(let i=0;i<5;i++) beep('square',[1200,1600,900,1800,1400][i],[1200,1600,900,1800,1400][i],.035,.07,i*.045); },
+  FANCY:  ()=>{ [1319,1568,2093].forEach((f,i)=>beep('triangle',f,f,.14,.13,i*.06)); },
+  SPOOKY: ()=>{ beep('sine',180,520,.22,.14); beep('sine',186,540,.22,.1,.02); beep('sine',520,160,.2,.1,.2); },
+};
+function sfx(name,arg,delay){
+  if(!name||!AU.ctx||AU.ctx.state!=='running'||!AU.vol) return;
+  const d=delay||0;
+  switch(name){
+    case 'move':   beep('square',880,880,.035,.06); break;
+    case 'ok':     beep('square',660,660,.05,.08); beep('square',990,990,.07,.08,.05); break;
+    case 'back':   beep('square',520,330,.09,.07); break;
+    case 'tick':   beep('square',1200,1200,.02,.04); break;
+    case 'door':   beep('triangle',300,150,.16,.14); burst(.12,.05,600,'lowpass'); break;
+    case 'atk':    (ATK_SFX[arg]||ATK_SFX.REGULAR)(); break;
+    case 'hit':    burst(.12,.24,700,'bandpass',d); beep('square',200,70,.12,.14,d); break;
+    case 'hitbig': burst(.2,.3,500,'bandpass',d); beep('square',320,50,.22,.18,d); burst(.1,.2,3000,'highpass',d+.06); break;
+    case 'hitweak':burst(.07,.12,400,'lowpass',d); beep('triangle',140,90,.08,.14,d); break;
+    case 'crit':   beep('square',1568,1568,.05,.09,d); beep('square',2093,2093,.09,.09,d+.05); break;
+    case 'miss':   burst(.22,.1,1800,'bandpass'); beep('sine',900,300,.2,.05); break;
+    case 'down':   [660,520,390].forEach((f,i)=>beep('square',f,f*.9,.09,.08,i*.09)); break;
+    case 'heal':   [523,659,784,1047].forEach((f,i)=>beep('triangle',f,f,.1,.14,i*.07)); break;
+    case 'faint':  beep('square',500,60,.5,.12); burst(.25,.08,300,'lowpass',.3); break;
+    case 'throw':  beep('sine',300,1100,.28,.1); break;
+    case 'shake':  beep('square',180,140,.06,.1); burst(.04,.08,1500); break;
+    case 'run':    for(let i=0;i<4;i++) beep('square',500+i*120,500+i*120,.04,.07,i*.06); break;
+    case 'bump':   beep('square',110,90,.06,.08); break;
+    case 'encounter': {   // the battle-start sting
+      burst(.5,.12,800,'bandpass'); beep('sawtooth',180,1400,.45,.06);
+      const notes=[523,659,784,1047,1319,1047,1319,1568];
+      notes.forEach((f,i)=>{ beep('square',f,f,.06,.07,.05+i*.045); beep('square',f*1.5,f*1.5,.05,.03,.05+i*.045); });
+      beep('sawtooth',131,131,.35,.1,.42); beep('square',262,262,.3,.06,.42); burst(.3,.15,300,'lowpass',.42);
+      break; }
+    case 'send':   burst(.1,.1,2000); beep('square',400,1000,.12,.08,.03); break;
+  }
+}
+window.addEventListener('keydown',e=>{ initAudio(); if(e.key.toLowerCase()==='n'&&!e.repeat) toggleMusic(); });
+window.addEventListener('pointerdown',()=>initAudio());
+(function(){ const b=document.getElementById('mus'); if(b){ b.addEventListener('click',e=>{ initAudio(); toggleMusic(); b.blur(); }); musicLabel(); } })();
+
 // ------------------------------ LOOP ----------------------------------
 function update(){
-  frame++;
+  frame++; updateMusic();
   if(ui.text&&ui.text.n<999) ui.text.n+=1.3;
   if(banner.t>0) banner.t--;
   if(B){
@@ -1218,7 +3175,7 @@ function loop(ts){
   render();
   requestAnimationFrame(loop);
 }
-window.CARLOS={ get G(){return G;}, get scene(){return scene;}, get busy(){return busy;}, ui, onPress, held, SPECIES, MOVES, MAPS };
+window.CARLOS={ fx, INST, VOICES, playNote, buildSong, KITS, mapLayer, LAYER, AU, SONGS, ENT, WARPS, EXITS, SOLID, BUS, WILD, TIERS, LABELS, makeMon, learnset, get G(){return G;}, get scene(){return scene;}, get busy(){return busy;}, ui, onPress, held, SPECIES, MOVES, MAPS };
 requestAnimationFrame(loop);
 </script>
 </body>
